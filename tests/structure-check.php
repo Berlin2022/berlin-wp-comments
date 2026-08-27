@@ -340,9 +340,18 @@ $comments_tpl = is_file( $root . '/templates/comments.php' )
 	? file_get_contents( $root . '/templates/comments.php' )
 	: '';
 bwpc_check(
-	false !== strpos( $comments_tpl, 'bwpc' ) && false !== strpos( $comments_tpl, '$list' ),
-	'评论区容器模板已落地（P2：输出 $list）',
-	'comments.php 仍为空占位'
+    false !== strpos( $comments_tpl, 'bwpc' ) && false !== strpos( $comments_tpl, '$list' ),
+    '评论区容器模板已落地（P2：输出 $list）',
+    'comments.php 仍为空占位'
+);
+
+// P2 修正（AUDIT-006）：render_comment() 处于 wp_list_comments callback 协议中，
+// Walker 以 ob 捕获输出、不读取返回值；故必须 echo render_template('comment',...) 的返回值，
+// 否则评论 HTML 运行时被丢弃（结构全绿但列表空）。守护此契约不变量，防同类断链复发。
+bwpc_check(
+    (bool) preg_match( '/echo\s+\$this->plugin->render_template\(\s*\'comment\'/', $renderer_src ),
+    '渲染回调输出契约（P2：render_comment 必须 echo render_template(comment)）',
+    'render_comment() 未 echo render_template(comment) 返回值，Walker 捕获为空'
 );
 
 /* -------------------------------------------------------------------------

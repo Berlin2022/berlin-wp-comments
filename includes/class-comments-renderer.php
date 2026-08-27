@@ -161,7 +161,10 @@ class Berlin_WP_Comments_Renderer {
 		// 头像经 P1 的 get_avatar_data 挂钩解析：本地头像或默认 SVG，零 Gravatar（O8）。
 		$avatar_html = $show_avatar ? get_avatar( $comment, $avatar_size ) : '';
 
-		$this->plugin->render_template(
+		// ⚠️ 输出（非返回）：本方法处于 wp_list_comments 的 callback 协议中，
+		// Walker_Comment::start_el() 以 ob_start() 捕获 callback 输出、不读取返回值。
+		// 故必须 echo，否则评论 HTML 在运行时被丢弃、列表为空（AUDIT-006 修正）。
+		echo $this->plugin->render_template(
 			'comment',
 			array(
 				'comment'     => $comment,
