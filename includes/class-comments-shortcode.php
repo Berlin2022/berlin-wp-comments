@@ -6,11 +6,14 @@
  *
  * CP1 指定调用形态：
  *
- *   [wp_comments]
- *   [wp_comments avatar_size="48"]
- *   [wp_comments comments_per_page="10"]
- *   [wp_comments show_avatar="yes"]
- *   [wp_comments avatar_size="48" comments_per_page="10"]
+ *   [berlin_comments]
+ *   [berlin_comments avatar_size="48"]
+ *   [berlin_comments comments_per_page="10"]
+ *   [berlin_comments show_avatar="yes"]
+ *   [berlin_comments avatar_size="48" comments_per_page="10"]
+ *
+ * O1 裁定（OPEN_ITEMS ① CLOSED）：canonical `[berlin_comments]` + 别名
+ * `[wp_comments]`（兼容既有内容，不静默覆盖他人标签）。
  *
  * @package Berlin_WP_Comments
  */
@@ -22,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Class Berlin_WP_Comments_Shortcode
  *
- * 骨架状态：shortcode 已注册（可验证接线），但返回占位注释，不产生实际输出。
+ * P4 实现：落实骨架 D4 阶段桩（注册 canonical+alias、条件入队资源、装配真实输出）。
  */
 class Berlin_WP_Comments_Shortcode {
 
@@ -59,54 +62,49 @@ class Berlin_WP_Comments_Shortcode {
 	}
 
 	/**
-	 * 注册 shortcode 与资源检测钩子。
+	 * 注册 shortcode 与资源条件入队钩子。
+	 *
+	 * O1：canonical [berlin_comments] + alias [wp_comments] 共用同一处理器。
+	 * O9：仅当页面含本 shortcode 才入队资源（wp 预检测为主，handle 兜底）。
 	 *
 	 * @return void
 	 */
 	public function register() {
 		add_shortcode( BWPC_SHORTCODE, array( $this, 'handle' ) );
+		add_shortcode( BWPC_SHORTCODE_ALIAS, array( $this, 'handle' ) );
 
-		// TODO[D4]：预检测 + 条件入队（见 WP_COMMENTS_ARCHITECTURE.md §9）。
-		// add_action( 'wp', array( $this, 'maybe_enqueue_assets' ) );
+		// O9 轻量：wp 钩子预检测页面内容是否含 shortcode（先于 wp_enqueue_scripts，
+		// 资源可正常进入 <head>）；小工具/区块模板等盲区由 handle() 兜底。
+		add_action( 'wp', array( $this, 'maybe_enqueue_assets' ) );
 	}
 
 	/**
 	 * Shortcode 处理器。
 	 *
-	 * TODO[D4]：装配实际输出。目标结构（CP1 指定）：
-	 *
-	 *     评论列表 → 分页 → 评论表单
-	 *
-	 * 骨架期返回 HTML 注释占位，使接线可在真实站点验证而不产生可见输出。
+	 * 目标结构（CP1 指定）：评论列表 → 分页 → 评论表单。
+	 * 由 Berlin_WP_Comments_Renderer::render_list() 统一装配
+	 * （其内部已包含分页占位与表单接入，避免重复输出）。
 	 *
 	 * @param array|string $atts Shortcode 属性。
 	 * @return string
 	 */
 	public function handle( $atts ) {
 		$args = $this->normalize_atts( $atts );
-		unset( $args );
 
-		// TODO[D4]：
-		//   $this->ensure_assets();
-		//   $out  = $this->renderer->render_list( $args );
-		//   $out .= $this->renderer->render_pagination( $args );
-		//   $out .= $this->form->render( $args );
-		//   return $out;
+		// O9 兜底：确保资源入队（覆盖 wp 预检测盲区）。
+		$this->ensure_assets();
 
-		return '<!-- Berlin WP Comments ' . esc_html( BWPC_VERSION ) . ': 骨架版，功能未实现（CP1 指令 D8） -->';
+		return $this->renderer->render_list( $args );
 	}
 
 	/**
-	 * 规范化 shortcode 参数。
-	 *
-	 * TODO[D4]：补齐类型与边界校验（avatar_size 上下限、
-	 * comments_per_page 上限防滥用、show_avatar 布尔解析）。
+	 * 规范化 shortcode 参数（含边界校验）。
 	 *
 	 * @param array|string $atts 原始属性。
 	 * @return array 规范化后的参数。
 	 */
 	protected function normalize_atts( $atts ) {
-		return shortcode_atts(
+		$a = shortcode_atts(
 			array(
 				// 头像边长（px）。
 				'avatar_size'       => 48,
@@ -114,17 +112,56 @@ class Berlin_WP_Comments_Shortcode {
 				'comments_per_page' => '',
 				// 是否显示头像。
 				'show_avatar'       => 'yes',
+				// 目标对象 ID。默认当前对象；④ 仅当前对象，不接受聚合。
+				'post_id'           => 0,
 			),
 			$atts,
 			BWPC_SHORTCODE
 		);
+
+		// avatar_size 限幅 16–256（O9 轻量 / 防滥用）。
+		$a['avatar_size'] = (int) $a['avatar_size'];
+		$a['avatar_size'] = min( 256, max( 16, $a['avatar_size'] ) );
+
+		// comments_per_page：整数 1–100，否则沿用 WP 站点设置（空串）。
+		if ( '' !== $a['comments_per_page'] && is_numeric( $a['comments_per_page'] ) ) {
+			$a['comments_per_page'] = min( 100, max( 1, (int) $a['comments_per_page'] ) );
+		} else {
+			$a['comments_per_page'] = '';
+		}
+
+		// show_avatar 布尔解析。
+		$a['show_avatar'] = in_array( $a['show_avatar'], array( 'no', 'false', '0' ), true ) ? 'no' : 'yes';
+
+		// post_id 仅接受数字（④ 聚合防御）。
+		$a['post_id'] = is_numeric( $a['post_id'] ) ? (int) $a['post_id'] : 0;
+
+		return $a;
 	}
 
 	/**
-	 * 确保资源已入队（兜底晚入队路径）。
+	 * wp 钩子预检测：页面内容含本 shortcode 时入队资源。
 	 *
-	 * TODO[D4]：实现双策略——`wp` 钩子预检测为主，本方法为兜底，
-	 * 覆盖 shortcode 出现在小工具/区块模板/页面构建器中的检测盲区。
+	 * @return void
+	 */
+	public function maybe_enqueue_assets() {
+		if ( $this->assets_done ) {
+			return;
+		}
+
+		$post = get_post();
+		if ( empty( $post ) || empty( $post->ID ) ) {
+			return;
+		}
+
+		if ( has_shortcode( $post->post_content, BWPC_SHORTCODE )
+			|| has_shortcode( $post->post_content, BWPC_SHORTCODE_ALIAS ) ) {
+			$this->enqueue_assets();
+		}
+	}
+
+	/**
+	 * 兜底晚入队（handle 内调用，覆盖小工具/区块模板盲区）。
 	 *
 	 * @return void
 	 */
@@ -132,13 +169,26 @@ class Berlin_WP_Comments_Shortcode {
 		if ( $this->assets_done ) {
 			return;
 		}
+		$this->enqueue_assets();
+	}
+
+	/**
+	 * 实际入队资源（O9 轻量：仅 CSS；JS 保持 0 KB 复用 WP 核心）。
+	 *
+	 * @return void
+	 */
+	protected function enqueue_assets() {
+		if ( $this->assets_done ) {
+			return;
+		}
 		$this->assets_done = true;
 
-		// TODO[D4]：wp_enqueue_style( 'bwpc-comments', ... )。
-		//
-		// 线程回复复用 WP 核心脚本，不计入插件自有 JS 体积：
-		// if ( comments_open() && get_option( 'thread_comments' ) ) {
-		//     wp_enqueue_script( 'comment-reply' );
-		// }
+		wp_enqueue_style(
+			'bwpc-comments',
+			BWPC_PLUGIN_URL . 'assets/css/comments.css',
+			array(),
+			BWPC_VERSION,
+			'all'
+		);
 	}
 }

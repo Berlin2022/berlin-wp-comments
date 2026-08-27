@@ -72,7 +72,7 @@ class Berlin_WP_Comments_Renderer {
 
 		$list  = $this->build_list_html( $comments, $args );
 		$pager = $this->render_pagination( $args ); // P5 待实现，当前返回 ''。
-		$form  = '';                                // P3 待实现。
+		$form  = $this->plugin->form->render( $args ); // P3 实现；P4 接入评论区（列表 → 分页 → 表单）。
 
 		$count = $this->count_comments( $post_id );
 

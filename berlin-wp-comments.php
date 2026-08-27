@@ -3,7 +3,7 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       极简 WordPress 原生评论增强插件 —— Shortcode + 本地头像 + 原生评论。WordPress 负责数据与生命周期，本插件只负责呈现与头像。
- * Version:           0.1.3
+ * Version:           0.1.4
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Berlin
@@ -17,7 +17,7 @@
  * ---------------------------------------------------------------------------
  * 版本声明
  * ---------------------------------------------------------------------------
- * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现）。
+ * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现）。
  *
  * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
  * 已落地：
@@ -26,7 +26,7 @@
  *   - P2 评论渲染器 + 模板：WP_Comment_Query 取数 → wp_list_comments(callback) 走自有
  *     模板（templates/comment.php + comments.php）；模板覆盖顺序 子主题→父主题→插件
  *     （P9）；不使用 comments_template()（陷阱 C）。
- * 待实现：P4 短代码 / P5 分页 / P6 测试与 WP 实机。
+ * 待实现：P5 分页（OPEN_ITEMS ③，真实 WP 验证门禁）/ P6 测试与 WP 实机。
  * 各阶段进度见记忆仓 03_PLAN/CP2/CP2-001.md。
  *
  * ⚠️ 激活即生效：P1 改变全站头像来源（指向本地）。如需回退，停用本插件即可。
@@ -44,22 +44,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.3' );
+define( 'BWPC_VERSION', '0.1.4' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 /**
- * 主 shortcode 标签。
+ * 主 shortcode 标签（canonical）。
  *
- * CP1 立项文件指定 `[wp_comments]`，此处按 CP1 原文实现，未擅自改名。
- *
- * ⚠️ 已知风险：`wp_` 前缀属通用命名空间，与其他插件/主题碰撞时
- * add_shortcode() 会静默覆盖。CP3 已提交改名建议（主标签
- * `[berlin_comments]` + `[wp_comments]` 别名），等待 USER 裁定。
- * 见记忆仓 05_KNOWLEDGE/KNOWN_ISSUES/OPEN_ITEMS.md ①。
+ * O1 裁定（OPEN_ITEMS ① CLOSED）：主标签 `[berlin_comments]`，
+ * 别名 `[wp_comments]` 保留以兼容既有内容（向后兼容，不静默覆盖他人）。
+ * 改名于 P4 落地（AUDIT-006 recheck 后 P4 放行）。
  */
-define( 'BWPC_SHORTCODE', 'wp_comments' );
+define( 'BWPC_SHORTCODE', 'berlin_comments' );
+
+/**
+ * Shortcode 别名（向后兼容）。
+ *
+ * 兼容 CP1 早期指定的 `[wp_comments]` 用法；与 canonical 共用同一处理器。
+ */
+define( 'BWPC_SHORTCODE_ALIAS', 'wp_comments' );
 
 /**
  * 载入插件类。

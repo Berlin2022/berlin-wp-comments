@@ -389,6 +389,46 @@ bwpc_check(
 	'form.php 仍为空占位'
 );
 
+// P4 起：shortcode canonical + alias 常量已定义（O1 入口）。
+bwpc_check(
+	false !== strpos( $main, "define( 'BWPC_SHORTCODE', 'berlin_comments' )" )
+		&& false !== strpos( $main, "define( 'BWPC_SHORTCODE_ALIAS', 'wp_comments' )" ),
+	'Shortcode canonical+alias 常量已定义（P4：O1 [berlin_comments]+[wp_comments]）',
+	'主文件未定义 canonical/alias 常量'
+);
+
+// P4 起：两个标签均注册（O1 双标签接线）。
+bwpc_check(
+	false !== strpos( $shortcode_src, 'add_shortcode( BWPC_SHORTCODE' )
+		&& false !== strpos( $shortcode_src, 'add_shortcode( BWPC_SHORTCODE_ALIAS' ),
+	'Shortcode canonical+alias 均注册（P4：O1 双标签接线）',
+	'未同时注册 berlin_comments / wp_comments'
+);
+
+// P4 起：条件资源入队（O9 轻量）——wp 预检测 + 兜底，不全局无条件加载。
+bwpc_check(
+	false !== strpos( $shortcode_src, "add_action( 'wp'," )
+		&& false !== strpos( $shortcode_src, 'wp_enqueue_style' )
+		&& false !== strpos( $shortcode_src, 'has_shortcode' )
+		&& false !== strpos( $shortcode_src, 'assets_done' ),
+	'条件资源入队（P4：O9 wp 预检测 + 兜底 + 仅含 shortcode 才加载）',
+	'缺少 wp 预检测 / wp_enqueue_style / has_shortcode / assets_done 任一'
+);
+
+// P4 起：shortcode 产出真实输出（不再返回骨架占位）。
+bwpc_check(
+	false === strpos( $shortcode_src, '骨架版，功能未实现' ),
+	'Shortcode 产出真实输出（P4：已移除骨架占位）',
+	'handle() 仍返回骨架占位'
+);
+
+// P4 起：shortcode 参数边界校验（O9 轻量 / 防滥用）。
+bwpc_check(
+	false !== strpos( $shortcode_src, "'avatar_size'" ) && false !== strpos( $shortcode_src, 'max(' ),
+	'Shortcode 参数边界校验（P4：avatar_size 限幅）',
+	'normalize_atts 未做边界校验'
+);
+
 /* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */
