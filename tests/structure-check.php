@@ -354,6 +354,41 @@ bwpc_check(
     'render_comment() 未 echo render_template(comment) 返回值，Walker 捕获为空'
 );
 
+// P3 起：评论表单必须复用核心 comment_form 提交链路（不自造 <form>/nonce）。
+$form_src = is_file( $root . '/includes/class-comment-form.php' )
+	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-comment-form.php' ) )
+	: '';
+bwpc_check(
+	false !== strpos( $form_src, 'comment_form' ),
+	'评论表单复用核心提交链路（P3：comment_form，不自造表单/nonce）',
+	'未找到 comment_form 调用'
+);
+bwpc_check(
+	false === strpos( $form_src, '<form' ) && false === strpos( $form_src, 'action=' ),
+	'评论表单不自造提交表单（P3：无裸 <form>/action，复用核心端点）',
+	'发现自造 <form>/action，偏离核心提交链路'
+);
+bwpc_check(
+	false !== strpos( $form_src, 'current_user_can' ),
+	'评论关闭提示仅对有权限登录用户（P3：陷阱 D）',
+	'render_closed_notice 未做权限判断'
+);
+bwpc_check(
+	false !== strpos( $form_src, "wp_enqueue_script" ) && false !== strpos( $form_src, 'comment-reply' ),
+	'复用核心回复脚本（O4：comment-reply）',
+	'未 enqueue comment-reply'
+);
+
+// P3 起：表单包裹模板必须产出实际结构（echo $form_html，不自造 <form>）。
+$form_tpl = is_file( $root . '/templates/form.php' )
+	? file_get_contents( $root . '/templates/form.php' )
+	: '';
+bwpc_check(
+	false !== strpos( $form_tpl, 'echo $form_html' ),
+	'表单包裹模板已落地（P3：输出 $form_html）',
+	'form.php 仍为空占位'
+);
+
 /* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */

@@ -16,7 +16,7 @@
  *   **只要用 comment_form()，插件一行提交代码都不用写**，P3 自动成立。
  *   这是本插件能保持极简的核心原因。
  *
- *   ⚠️ 不要给评论提交自造 nonce——会与核心端点冲突。
+ *   ⚠️ 不給评论提交自造 nonce——会与核心端点冲突。
  *      nonce 只用于插件自己的写操作（如头像上传）。
  *
  * @package Berlin_WP_Comments
@@ -29,57 +29,117 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Class Berlin_WP_Comments_Form
  *
- * 骨架状态：全部方法为桩。
+ * P3 实现：消费骨架 TODO[D3]。
  */
 class Berlin_WP_Comments_Form {
 
 	/**
+	 * 插件主实例（用于模板渲染与依赖）。
+	 *
+	 * @var Berlin_WP_Comments_Plugin
+	 */
+	protected $plugin;
+
+	/**
+	 * 构造。
+	 *
+	 * @param Berlin_WP_Comments_Plugin $plugin 插件主实例。
+	 */
+	public function __construct( $plugin ) {
+		$this->plugin = $plugin;
+	}
+
+	/**
 	 * 渲染评论表单。
 	 *
-	 * TODO[D3]：实现。步骤：
-	 *   1. ! comments_open() 时走 render_closed_notice()
-	 *   2. 组装 comment_form() 参数（title_reply / class_form / 字段模板等）
-	 *   3. ob_start() → comment_form( $form_args ) → ob_get_clean()
+	 * 不写任何提交逻辑：直接调用核心 comment_form()，由 WP 负责
+	 * 审核/垃圾/通知/状态机。评论关闭时降级为管理员提示（陷阱 D）。
 	 *
-	 * @param array $args 已规范化的 shortcode 参数。
+	 * @param array $args 已规范化的 shortcode 参数（P4 传入；P3 可空）。
 	 * @return string 表单 HTML。
 	 */
-	public function render( array $args ) {
-		unset( $args );
+	public function render( array $args = array() ) {
+		// 评论关闭：对有编辑权限的登录用户给出明确提示，访客静默（陷阱 D）。
+		if ( ! comments_open() ) {
+			return $this->render_closed_notice();
+		}
 
-		// TODO[D3]：实现表单渲染。
-		return '';
+		// O4：线程回复复用核心 comment-reply 脚本（不写自有线程逻辑）。
+		$this->enqueue_reply_script();
+
+		$form_args = $this->get_form_args( $args );
+
+		// comment_form() 直接 echo，故 ob 捕获为字符串交由 shortcode 装配（P4）。
+		ob_start();
+		comment_form( $form_args );
+		$form_html = (string) ob_get_clean();
+
+		// 经模板输出（支持主题覆盖，P9）；模板只包裹、不自造 <form>。
+		return $this->plugin->render_template(
+			'form',
+			array(
+				'args'      => $form_args,
+				'form_html' => $form_html,
+			)
+		);
 	}
 
 	/**
 	 * 组装 comment_form() 参数。
 	 *
-	 * TODO[D3]：实现。定制走核心过滤器，不自造表单：
-	 *   - comment_form_defaults
-	 *   - comment_form_fields
-	 *   - comment_form_field_{$name}
+	 * 定制走**作用域内的参数**，不自造表单、不自造 nonce。
+	 * V1 字段（姓名+邮箱+评论内容）直接复用核心默认字段，无需改过滤器，
+	 * 故此处仅设置标题/容器 class/提交按钮文案，避免注册全站过滤器污染
+	 * 主题原生评论表单（P9：插件不接管主题）。如需更深定制，可在此基础上
+	 * 通过 comment_form_defaults / comment_form_fields 过滤器扩展。
 	 *
+	 * @param array $args 已规范化的 shortcode 参数。
 	 * @return array
 	 */
-	protected function get_form_args() {
-		// TODO[D3]：实现参数组装。
-		return array();
+	protected function get_form_args( array $args = array() ) {
+		$form_args = array(
+			'title_reply'         => __( '发表评论', 'berlin-wp-comments' ),
+			'title_reply_before'  => '<h3 id="bwpc-reply-title" class="bwpc-comment-reply-title">',
+			'title_reply_after'   => '</h3>',
+			'label_submit'        => __( '发表评论', 'berlin-wp-comments' ),
+			'class_form'          => 'bwpc-comment-form',
+			'id_form'             => 'bwpc-commentform',
+			'cancel_reply_before' => ' <span class="bwpc-cancel-reply">',
+			'cancel_reply_after'  => '</span>',
+		);
+
+		return $form_args;
 	}
 
 	/**
 	 * 评论关闭时的提示。
 	 *
-	 * ⚠️ 可用性陷阱（见 WP_COMMENTS_ARCHITECTURE.md §7）：
-	 * 多数站点的 Page 默认关闭评论。用户插入 shortcode 后只看到空白，
-	 * 会误判插件损坏。
-	 *
-	 * TODO[D3]：对**有编辑权限的登录用户**输出明确提示
-	 * （说明需在页面「讨论」面板勾选允许评论）；对普通访客保持静默。
+	 * ⚠️ 可用性陷阱（陷阱 D / Page 默认关评论）：多数站点 Page 默认关闭评论。
+	 * 用户插入 shortcode 后只看到空白会误判插件损坏。故对**有编辑权限的
+	 * 登录用户**输出明确提示；普通访客保持静默。
 	 *
 	 * @return string
 	 */
 	protected function render_closed_notice() {
-		// TODO[D3]：实现管理员可见提示。
-		return '';
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return '';
+		}
+
+		$message = __( '评论已关闭。如需在此页启用评论，请在后台该页面的「讨论」面板勾选「允许评论」。', 'berlin-wp-comments' );
+
+		return '<p class="bwpc-notice bwpc-notice--closed">' . esc_html( $message ) . '</p>';
+	}
+
+	/**
+	 * 条件加载核心评论回复脚本（O4 线程回复）。
+	 *
+	 * 仅当站点启用线程评论时入队；脚本由 WP 在页脚输出。
+	 *
+	 * @return void
+	 */
+	protected function enqueue_reply_script() {
+		if ( get_option( 'thread_comments' ) ) {
+			wp_enqueue_script( 'comment-reply' );
+		}
 	}
 }

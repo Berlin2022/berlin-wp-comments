@@ -80,7 +80,7 @@ final class Berlin_WP_Comments_Plugin {
 	private function boot() {
 		$this->avatar    = new Berlin_WP_Comments_Avatar();
 		$this->renderer  = new Berlin_WP_Comments_Renderer( $this );
-		$this->form      = new Berlin_WP_Comments_Form();
+		$this->form      = new Berlin_WP_Comments_Form( $this );
 		$this->shortcode = new Berlin_WP_Comments_Shortcode( $this->renderer, $this->form );
 
 		// 各模块自行注册钩子。
