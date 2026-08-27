@@ -127,9 +127,10 @@ class Berlin_WP_Comments_Renderer {
 			'echo'        => false,
 		);
 
-		// 分页已在 query_comments 层（DB 级 number+offset）完成；此处仅把
-		// 当前页评论交给 wp_list_comments 渲染并依 comment_parent 构建评论树，
-		// 不再传 per_page/page，避免与 DB 级分页重复切片（OPEN_ITEMS ③ 方案 A）。
+		// 分页已在 query_comments 层完成（AUDIT-008 ①：以顶层 thread 为单位的
+		// number+offset + 后代补全）；当前页评论已是「完整 thread 集合」，此处仅交给
+		// wp_list_comments 依 comment_parent 重建线程，不再传 per_page/page，避免
+		// 与 DB 级分页重复切片（OPEN_ITEMS ③ 方案 A）。
 		// wp_list_comments 第二参接受评论数组，无需污染全局 $wp_query。
 		$html = wp_list_comments( $list_args, $comments );
 
@@ -175,7 +176,14 @@ class Berlin_WP_Comments_Renderer {
 	/**
 	 * 取本页应显示的评论（WP_Comment_Query）。
 	 *
-	 * 尊重 page_comments / comments_per_page / default_comments_page 选项。
+	 * AUDIT-008 REQUIRED CORRECTION（P5 局部修正）：
+	 *   ① 分页单位 = 顶层评论（thread）。offset 落在「parent=0」的顶层评论上，
+	 *      而非平面 comment 行；再用 collect_thread_descendants() 补齐每个顶层
+	 *      thread 的完整后代子树，使 wp_list_comments() 依 comment_parent 重建线程时
+	 *      父节点不缺失。WP_Comment_Query 默认 hierarchical=false，不会自动补全后代，
+	 *      故原「平面 offset 切片」会把一条 thread 从父节点切到下一页。
+	 *   ② 实际消费 page_comments（分页总开关）与 default_comments_page（顶层排序方向），
+	 *      不再仅在注释中声称「尊重」。
 	 *
 	 * @param int   $post_id 目标对象 ID。
 	 * @param array $args    参数。
@@ -183,28 +191,39 @@ class Berlin_WP_Comments_Renderer {
 	 */
 	protected function query_comments( $post_id, array $args ) {
 		$per_page = $this->per_page( $args );
+		$order    = $this->top_level_order( $args );
 
-		$query_args = array(
+		$top_args = array(
 			'post_id' => $post_id,
 			'status'  => 'approve',
-			'order'   => 'ASC',
 			'type'    => 'comment',
+			'parent'  => 0,
+			'order'   => $order,
 		);
 
 		if ( $per_page > 0 ) {
-			$query_args['number'] = $per_page;
-			// 分页在 query 层落地（DB 级 offset），不依赖 comments_template()
-			// 建立的 $wp_query->comments 上下文（陷阱 C / OPEN_ITEMS ③ 方案 A）。
-			$query_args['offset'] = ( $this->current_cpage() - 1 ) * $per_page;
+			// ① 分页单位 = 顶层 thread：number+offset 落在 parent=0 上，
+			// 不依赖 comments_template() 建立的 $wp_query->comments 上下文
+			// （陷阱 C / OPEN_ITEMS ③ 方案 A）。
+			$top_args['number'] = $per_page;
+			$top_args['offset'] = ( $this->current_cpage() - 1 ) * $per_page;
+		} else {
+			$top_args['number'] = 0;
 		}
 
-		$comments = get_comments( $query_args );
+		$top = get_comments( $top_args );
+		if ( empty( $top ) || ! is_array( $top ) ) {
+			return array();
+		}
 
-		return is_array( $comments ) ? $comments : array();
+		// ① 补齐每个顶层 thread 的完整后代，确保 wp_list_comments 建树不缺父。
+		$descendants = $this->collect_thread_descendants( wp_list_pluck( $top, 'comment_ID' ), $post_id );
+
+		return array_merge( $top, $descendants );
 	}
 
 	/**
-	 * 已批准评论总数（用于标题计数）。
+	 * 已批准评论总数（用于标题计数：含全部回复）。
 	 *
 	 * @param int $post_id 对象 ID。
 	 * @return int
@@ -223,19 +242,114 @@ class Berlin_WP_Comments_Renderer {
 	}
 
 	/**
-	 * 计算每页评论数。
+	 * 顶层评论（thread）总数，用于分页分母。
+	 *
+	 * AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，
+	 * 故 max_pages 由「parent=0 的评论数」推导，而非全部平面 comment 行。
+	 *
+	 * @param int $post_id 对象 ID。
+	 * @return int
+	 */
+	protected function count_top_level_comments( $post_id ) {
+		$count = get_comments(
+			array(
+				'post_id' => $post_id,
+				'status'  => 'approve',
+				'type'    => 'comment',
+				'parent'  => 0,
+				'count'   => true,
+			)
+		);
+
+		return (int) $count;
+	}
+
+	/**
+	 * 计算每页评论数（= 每页顶层 thread 数）。
+	 *
+	 * AUDIT-008 REQUIRED CORRECTION ②：实际消费 page_comments 作为分页总开关，
+	 * 而非仅读 comments_per_page。显式 shortcode 覆盖优先（不受总开关限制）。
 	 *
 	 * @param array $args 参数。
-	 * @return int 0 表示沿用 WP 站点设置（不限制 number）。
+	 * @return int 0 表示不分页。
 	 */
 	protected function per_page( array $args ) {
+		// 显式 shortcode 覆盖优先：用户明确指定每页数时不受 page_comments 总开关限制。
 		if ( isset( $args['comments_per_page'] ) && is_numeric( $args['comments_per_page'] ) && (int) $args['comments_per_page'] > 0 ) {
 			return (int) $args['comments_per_page'];
+		}
+
+		// 实际消费 page_comments：站点关闭评论分页时，插件不自行分页。
+		if ( ! get_option( 'page_comments', 0 ) ) {
+			return 0;
 		}
 
 		$opt = (int) get_option( 'comments_per_page', 0 );
 
 		return $opt > 0 ? $opt : 0;
+	}
+
+	/**
+	 * 顶层 thread 排序方向（AUDIT-008 REQUIRED CORRECTION ②）。
+	 *
+	 * 实际消费 default_comments_page：'newest' → DESC（首页为最新 thread），
+	 * 否则 ASC（首页为最早 thread）。cpage 仍从 1 递增，与 offset 切片一致。
+	 *
+	 * @param array $args 参数。
+	 * @return string 'ASC' | 'DESC'
+	 */
+	protected function top_level_order( array $args ) {
+		$default_page = get_option( 'default_comments_page', 'oldest' );
+		return ( 'newest' === $default_page ) ? 'DESC' : 'ASC';
+	}
+
+	/**
+	 * 递归补齐给定父评论的完整后代子树（平面数组，保留 comment_parent）。
+	 *
+	 * AUDIT-008 REQUIRED CORRECTION ①：顶层 thread 分页后，必须把每个顶层评论的
+	 * 全部后代（所有层级）一并取回，否则 wp_list_comments() 依 comment_parent 建树时
+	 * 父节点缺失、thread 被切断。
+	 *
+	 * @param int[] $parent_ids 顶层评论 ID 数组。
+	 * @param int   $post_id    对象 ID。
+	 * @return WP_Comment[] 后代评论（不含父本身）。
+	 */
+	protected function collect_thread_descendants( array $parent_ids, $post_id ) {
+		$parent_ids = array_filter( array_map( 'intval', $parent_ids ) );
+		if ( empty( $parent_ids ) ) {
+			return array();
+		}
+
+		$descendants = array();
+		$queue       = array_values( $parent_ids );
+		$guard       = 0;
+
+		while ( ! empty( $queue ) && $guard < 50 ) {
+			$guard++;
+
+			$children = get_comments(
+				array(
+					'post_id' => $post_id,
+					'status'  => 'approve',
+					'type'    => 'comment',
+					'parent'  => $queue,
+					'order'   => 'ASC',
+					'number'  => 0,
+				)
+			);
+
+			if ( empty( $children ) || ! is_array( $children ) ) {
+				break;
+			}
+
+			foreach ( $children as $c ) {
+				$descendants[] = $c;
+			}
+
+			$queue = array_filter( array_map( 'intval', wp_list_pluck( $children, 'comment_ID' ) ) );
+		}
+
+		return $descendants;
 	}
 
 	/**
@@ -263,7 +377,7 @@ class Berlin_WP_Comments_Renderer {
 	 *   singular object 固定链接输出 comment-page-N / ?cpage=N，不依赖
 	 *   comments_template() 建立的 $wp_query->comments 上下文。
 	 * - 当前页码来自 current_cpage()（get_query_var('cpage')）；总页数由本插件
-	 *   自己的评论计数与每页数推导，避免依赖 $wp_query->max_num_comment_pages。
+	 *   自己的「顶层 thread 计数」与每页数推导（AUDIT-008 ①），避免依赖 $wp_query->max_num_comment_pages。
 	 *
 	 * ⚠️ O5 门禁：原生 cpage 在真实 WP Page 语境下的行为须 P6 实机验证，
 	 * 验证前 O5 仍 BLOCKED（见 CHK-009 / 立项文件 ③ 裁定）。若实机 FAIL，
@@ -283,7 +397,7 @@ class Berlin_WP_Comments_Renderer {
 			return ''; // 未限制每页数 → 不分页。
 		}
 
-		$total = $this->count_comments( $post_id );
+		$total = $this->count_top_level_comments( $post_id ); // AUDIT-008 ①：分页分母 = 顶层 thread 数
 		if ( $total <= $per_page ) {
 			return ''; // 单页，无需分页。
 		}

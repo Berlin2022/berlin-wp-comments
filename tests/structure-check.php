@@ -481,6 +481,46 @@ bwpc_check(
 	'render_pagination 仍为骨架占位'
 );
 
+// AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，offset 落在 parent=0 上，
+// 不把 thread 从父节点切到下一页（WP_Comment_Query 默认 hierarchical=false）。
+bwpc_check(
+	(bool) preg_match( "/'parent'\s*=>\s*0/", $renderer_src )
+		&& false !== strpos( $renderer_src, "'offset'" ),
+	'分页按顶层 thread 单位（AUDIT-008①：query_comments 以 parent=>0 + offset 切片顶层）',
+	'query_comments 未按顶层评论分页（仍按平面 comment 行切片）'
+);
+
+// AUDIT-008 REQUIRED CORRECTION ①：必须补齐每个顶层 thread 的完整后代，
+// 否则 wp_list_comments 依 comment_parent 建树时父节点缺失。
+bwpc_check(
+	false !== strpos( $renderer_src, 'collect_thread_descendants' )
+		&& false !== strpos( $renderer_src, 'wp_list_pluck' ),
+	'thread 后代补全（AUDIT-008①：collect_thread_descendants 补齐后代子树）',
+	'未补齐顶层评论的后代，分页会切断 thread'
+);
+
+// AUDIT-008 REQUIRED CORRECTION ②：per_page() 实际消费 page_comments 总开关。
+bwpc_check(
+	false !== strpos( $renderer_src, 'page_comments' ),
+	'per_page 消费 page_comments（AUDIT-008②：分页总开关）',
+	'per_page() 未消费 page_comments 选项'
+);
+
+// AUDIT-008 REQUIRED CORRECTION ②：default_comments_page 决定顶层排序方向。
+bwpc_check(
+	false !== strpos( $renderer_src, 'default_comments_page' )
+		&& false !== strpos( $renderer_src, 'top_level_order' ),
+	'default_comments_page 消费（AUDIT-008②：top_level_order 决定排序）',
+	'未消费 default_comments_page 决定 thread 排序'
+);
+
+// AUDIT-008 REQUIRED CORRECTION ①：分页总页数基于顶层 thread 数（非全部 comment 行）。
+bwpc_check(
+	false !== strpos( $renderer_src, 'count_top_level_comments' ),
+	'分页分母=顶层 thread 数（AUDIT-008①：count_top_level_comments）',
+	'render_pagination 未以顶层评论数推导 max_pages'
+);
+
 /* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */

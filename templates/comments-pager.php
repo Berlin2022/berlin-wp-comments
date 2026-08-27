@@ -12,7 +12,7 @@
  * @var array $links     分页链接数组，每项含 page / url / current。
  * @var int   $current   当前页码。
  * @var int   $max_pages 总页数。
- * @var int   $total     已批准评论总数。
+ * @var int   $total     顶层 thread 总数（与 max_pages 同口径）。
  *
  * @package Berlin_WP_Comments
  *
