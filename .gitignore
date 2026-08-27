@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# Berlin WP Comments — .gitignore
+# ---------------------------------------------------------------------------
+
+# 依赖
+/vendor/
+/node_modules/
+composer.lock
+package-lock.json
+yarn.lock
+
+# 构建产物
+/build/
+/dist/
+*.zip
+
+# 测试与覆盖率
+/.phpunit.result.cache
+/coverage/
+/tests/tmp/
+/wordpress/
+/wordpress-tests-lib/
+
+# 本地环境
+/.wp-env.override.json
+.env
+.env.local
+
+# 编辑器 / IDE
+/.idea/
+/.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+
+# 翻译编译产物（保留 .pot/.po，忽略 .mo）
+/languages/*.mo
+
+# 绝不提交
+# 密钥、凭据、站点数据库导出
+*.pem
+*.key
+*.sql
+*.sqlite
+secrets.*
