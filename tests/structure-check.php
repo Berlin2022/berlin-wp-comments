@@ -441,6 +441,46 @@ bwpc_check(
 	'register() 未以 shortcode_exists() 守卫包裹 add_shortcode（可能抢占外部同名 handler）'
 );
 
+// P5 起：分页复用原生 cpage（OPEN_ITEMS ③ 方案 A）。
+bwpc_check(
+	false !== strpos( $renderer_src, 'get_comments_pagenum_link' ),
+	'分页复用原生 cpage（P5：OPEN_ITEMS ③ 方案 A，get_comments_pagenum_link）',
+	'render_pagination 未使用原生 cpage 链接生成'
+);
+
+// P5 起：query_comments 在 DB 层做分页（number + offset），不依赖 comments_template 上下文。
+bwpc_check(
+	false !== strpos( $renderer_src, "'offset'" ) || false !== strpos( $renderer_src, '"offset"' ),
+	'分页在 query 层落地（P5：query_comments 应用 offset）',
+	'query_comments 未应用 offset 分页'
+);
+
+// P5 起：当前页码读取原生 cpage 查询变量。
+bwpc_check(
+	(bool) preg_match( "/get_query_var\(\s*'cpage'/", $renderer_src ),
+	'当前页码读取原生 cpage（P5：get_query_var(\'cpage\')）',
+	'render_pagination/query_comments 未读取 cpage 查询变量'
+);
+
+// P5 起：分页模板已落地（可被主题覆盖，P9）。
+$pager_tpl = is_file( $root . '/templates/comments-pager.php' )
+	? file_get_contents( $root . '/templates/comments-pager.php' )
+	: '';
+bwpc_check(
+	false !== strpos( $pager_tpl, 'bwpc-pager__list' )
+		&& false !== strpos( $pager_tpl, 'esc_url' ),
+	'分页模板已落地（P5：templates/comments-pager.php）',
+	'comments-pager.php 缺失或不含分页结构'
+);
+
+// P5 起：render_pagination 不再返回骨架占位空串（已实装原生 cpage）。
+bwpc_check(
+	false === strpos( $renderer_src, "TODO[D4]：待 OPEN_ITEMS ③ 裁定后实现" )
+		&& false !== strpos( $renderer_src, 'get_comments_pagenum_link' ),
+	'分页已实装（P5：render_pagination 不再为占位）',
+	'render_pagination 仍为骨架占位'
+);
+
 /* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */

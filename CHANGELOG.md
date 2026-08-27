@@ -2,9 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.5] — UNRELEASED
+
+> 阶段：V1 实现期 P1–P5 已落地（P6 测试与 WP 实机 待做）。⚠️ O5 门禁：原生 cpage 分页须 P6 真实 WP 验证后关闭 O5。
+
+- **P5 分页（OPEN_ITEMS ③，方案 A = 原生 cpage）**：`render_pagination()` 复用 `get_comments_pagenum_link()` 生成 `comment-page-N` / `?cpage=N` 链接，不依赖 `comments_template()` 上下文（陷阱 C）；分页在 `query_comments` 层以 `number`+`offset` 落地，`build_list_html` 不再向 `wp_list_comments` 传 `per_page/page` 避免双重切片；新增 `templates/comments-pager.php`（主题可覆盖，P9）。O5 在真实 WP 验证前仍 BLOCKED。结构自检新增 5 项 P5 原生 cpage 分页断言（现 83/83 全 PASS）。
+- **范围守界**：P5 未注册重写规则（方案 A 重写规则须先真实 Page 实机确认，按 O5 门禁 deferred）；未越权 P6。
+
 ## [0.1.4] — UNRELEASED
 
-> 阶段：V1 实现期 P1–P4 已落地（P5 分页 / P6 测试与 WP 实机 待做）。
+> 阶段：V1 实现期 P1–P4 已落地（P5 分页见 0.1.5）。
 
 - **P1 本地头像**：`get_avatar_data` 挂钩 + 后台上传字段（user_meta attachment_id），零 Gravatar 请求（陷阱 A）。
 - **P2 评论渲染器 + 模板**：`WP_Comment_Query` 取数 → `wp_list_comments(callback)` 走自有模板；模板覆盖顺序 子主题→父主题→插件（P9）；不使用 `comments_template()`（陷阱 C）。

@@ -71,7 +71,7 @@ class Berlin_WP_Comments_Renderer {
 		}
 
 		$list  = $this->build_list_html( $comments, $args );
-		$pager = $this->render_pagination( $args ); // P5 待实现，当前返回 ''。
+		$pager = $this->render_pagination( $args ); // P5：原生 cpage 分页（OPEN_ITEMS ③ 方案 A）。
 		$form  = $this->plugin->form->render( $args ); // P3 实现；P4 接入评论区（列表 → 分页 → 表单）。
 
 		$count = $this->count_comments( $post_id );
@@ -127,13 +127,9 @@ class Berlin_WP_Comments_Renderer {
 			'echo'        => false,
 		);
 
-		// 分页方案待 OPEN_ITEMS ③（P5）；此处按每页条数切分（不接管分页链接）。
-		$per_page = $this->per_page( $args );
-		if ( $per_page > 0 ) {
-			$list_args['per_page'] = $per_page;
-			$list_args['page']     = 1;
-		}
-
+		// 分页已在 query_comments 层（DB 级 number+offset）完成；此处仅把
+		// 当前页评论交给 wp_list_comments 渲染并依 comment_parent 构建评论树，
+		// 不再传 per_page/page，避免与 DB 级分页重复切片（OPEN_ITEMS ③ 方案 A）。
 		// wp_list_comments 第二参接受评论数组，无需污染全局 $wp_query。
 		$html = wp_list_comments( $list_args, $comments );
 
@@ -197,7 +193,9 @@ class Berlin_WP_Comments_Renderer {
 
 		if ( $per_page > 0 ) {
 			$query_args['number'] = $per_page;
-			$query_args['paged']  = 1;
+			// 分页在 query 层落地（DB 级 offset），不依赖 comments_template()
+			// 建立的 $wp_query->comments 上下文（陷阱 C / OPEN_ITEMS ③ 方案 A）。
+			$query_args['offset'] = ( $this->current_cpage() - 1 ) * $per_page;
 		}
 
 		$comments = get_comments( $query_args );
@@ -241,21 +239,79 @@ class Berlin_WP_Comments_Renderer {
 	}
 
 	/**
-	 * 渲染分页链接（P5 待实现，OPEN_ITEMS ③）。
+	 * 读取当前评论分页页码（原生 cpage 查询变量）。
 	 *
-	 * ⚠️ 实现路径待裁定（OPEN_ITEMS ③）：
-	 *   A. 复用原生 cpage / comment-page-N（CP3 倾向，符合 P1 原生优先）
-	 *   B. 自有 query arg wpc_page（简单但与原生分页脱节）
+	 * 方案 A（OPEN_ITEMS ③，原生 cpage）：复用 WP 原生评论分页语境，
+	 * 不依赖 comments_template() 建立的 $wp_query->comments 上下文。
 	 *
-	 * 未裁定前不实现，避免形成难以回退的技术债。
+	 * ⚠️ O5 门禁：原生 cpage 在真实 WordPress Page 语境下的行为（含
+	 * comment-page-N 固定链接、?cpage=N 解析）须由 P6 实机验证后方能关闭 O5；
+	 * 本方法仅负责读取，不在此断言验证结论。
+	 *
+	 * @return int 当前页码（最小 1）。
+	 */
+	protected function current_cpage() {
+		$c = (int) get_query_var( 'cpage', 1 );
+		return $c > 0 ? $c : 1;
+	}
+
+	/**
+	 * 渲染分页链接（P5，OPEN_ITEMS ③ 方案 A = 原生 cpage）。
+	 *
+	 * 设计：
+	 * - 复用 WP 原生评论分页链接生成 get_comments_pagenum_link()，基于当前
+	 *   singular object 固定链接输出 comment-page-N / ?cpage=N，不依赖
+	 *   comments_template() 建立的 $wp_query->comments 上下文。
+	 * - 当前页码来自 current_cpage()（get_query_var('cpage')）；总页数由本插件
+	 *   自己的评论计数与每页数推导，避免依赖 $wp_query->max_num_comment_pages。
+	 *
+	 * ⚠️ O5 门禁：原生 cpage 在真实 WP Page 语境下的行为须 P6 实机验证，
+	 * 验证前 O5 仍 BLOCKED（见 CHK-009 / 立项文件 ③ 裁定）。若实机 FAIL，
+	 * 按 CP2-001 P5 降级方案 B（自有 query arg wpc_page）并记 Deviation。
 	 *
 	 * @param array $args 已规范化的 shortcode 参数。
-	 * @return string 分页 HTML。
+	 * @return string 分页 HTML（单页或不可分页时返回空串）。
 	 */
 	public function render_pagination( array $args ) {
-		unset( $args );
+		$post_id = $this->resolve_post_id( $args );
+		if ( ! $post_id ) {
+			return '';
+		}
 
-		// TODO[D4]：待 OPEN_ITEMS ③ 裁定后实现。
-		return '';
+		$per_page = $this->per_page( $args );
+		if ( $per_page <= 0 ) {
+			return ''; // 未限制每页数 → 不分页。
+		}
+
+		$total = $this->count_comments( $post_id );
+		if ( $total <= $per_page ) {
+			return ''; // 单页，无需分页。
+		}
+
+		$max_pages = (int) ceil( $total / $per_page );
+		$current   = $this->current_cpage();
+		if ( $current > $max_pages ) {
+			$current = $max_pages;
+		}
+
+		$links = array();
+		for ( $i = 1; $i <= $max_pages; $i++ ) {
+			$links[] = array(
+				'page'    => $i,
+				'url'     => get_comments_pagenum_link( $i ),
+				'current' => ( $i === $current ),
+			);
+		}
+
+		return $this->plugin->render_template(
+			'comments-pager',
+			array(
+				'args'      => $args,
+				'links'     => $links,
+				'current'   => $current,
+				'max_pages' => $max_pages,
+				'total'     => $total,
+			)
+		);
 	}
 }
