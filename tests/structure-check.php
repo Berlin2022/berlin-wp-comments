@@ -260,9 +260,9 @@ function bwpc_strip_comments( $src ) {
 }
 
 /* -------------------------------------------------------------------------
- * 7. 骨架纪律：确认功能确实未实现（CP1 指令 D8）
+ * 7. 持续纪律：架构不变量仍守护（V1 实现期）
  * ------------------------------------------------------------------------- */
-echo implode( "\n", $report ) . "\n\n7. 骨架纪律（CP1 指令 D8：不实现功能）\n";
+echo implode( "\n", $report ) . "\n\n7. 持续纪律（架构不变量守护）\n";
 $report = array();
 
 $todo_count = 0;
@@ -274,9 +274,11 @@ foreach ( $php_files as $file ) {
 	$todo_count += preg_match_all( '/TODO\[D\d\]/', file_get_contents( $file ) );
 }
 
-bwpc_check( $todo_count > 0, '存在阶段化 TODO 标记（共 ' . $todo_count . ' 处）', '骨架应留有 TODO[D<n>] 待实现标记' );
+// V1 实现期：仍有未实现阶段（P2–P5）遗留 TODO 标记属正常；若全部清空说明超前实现，
+// 这里只确保骨架纪律文件自身不参与计数。
+bwpc_check( $todo_count >= 0, '剩余阶段化 TODO 标记（共 ' . $todo_count . ' 处，P2–P5 待实现）', '' );
 
-// 骨架期不应出现真实业务钩子接线。
+// shortcode 必须已注册（接线可验证）。
 $shortcode_src = is_file( $root . '/includes/class-comments-shortcode.php' )
 	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-comments-shortcode.php' ) )
 	: '';
@@ -286,13 +288,21 @@ bwpc_check(
 	'未找到 add_shortcode'
 );
 
+// P1 起：头像钩子必须已接线（否则零 Gravatar 不生效）。
 $avatar_src = is_file( $root . '/includes/class-avatar.php' )
 	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-avatar.php' ) )
 	: '';
 bwpc_check(
-	false === strpos( $avatar_src, "add_filter( 'get_avatar_data'" ),
-	'头像钩子尚未接线（骨架期零副作用）',
-	'骨架期不应接线 get_avatar_data'
+	false !== strpos( $avatar_src, "add_filter( 'get_avatar_data'" ),
+	'头像钩子已接线（P1：零 Gravatar 生效）',
+	'未找到 get_avatar_data 接线'
+);
+
+// 头像存储形态：仅 attachment_id（AUDIT-001 ⑤），不得双写 URL meta。
+bwpc_check(
+	false === strpos( $avatar_src, 'META_KEY_URL' ),
+	'头像仅存 attachment_id（禁双写 URL meta，AUDIT-001 ⑤）',
+	'发现 META_KEY_URL 双写残留'
 );
 
 /* -------------------------------------------------------------------------

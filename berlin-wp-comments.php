@@ -3,7 +3,7 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       极简 WordPress 原生评论增强插件 —— Shortcode + 本地头像 + 原生评论。WordPress 负责数据与生命周期，本插件只负责呈现与头像。
- * Version:           0.1.0-skeleton
+ * Version:           0.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Berlin
@@ -15,21 +15,22 @@
  * @package Berlin_WP_Comments
  *
  * ---------------------------------------------------------------------------
- * 骨架声明（CP1 指令 D8）
+ * 版本声明
  * ---------------------------------------------------------------------------
- * 本版本为 **骨架**：结构、类、钩子接线点、模板占位均已就位，但
- * **功能全部未实现**。这是 CP1 立项裁定的第一阶段交付物：
+ * V1_IN_PROGRESS（P1 本地头像已实现）。
  *
- *   「初始化项目 + 建立插件骨架 + 输出实现计划 + 不实现功能。」
+ * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
+ * 已落地：
+ *   - P1 本地头像：get_avatar_data 挂钩 + 后台上传字段（user_meta attachment_id），
+ *     零 Gravatar 请求（陷阱 A 处理）。
+ * 待实现：P2 评论渲染器 + 模板 / P3 表单 / P4 短代码 / P5 分页 / P6 测试与 WP 实机。
+ * 各阶段进度见记忆仓 03_PLAN/CP2/CP2-001.md。
  *
- * 所有待实现点以 `TODO[D<n>]` 标记，n 对应实现计划阶段
- * （见记忆仓 03_PLAN/CP2/CP2-001_v1_implementation_plan.md）。
- *
- * 本插件此刻可安全激活/停用，不产生任何前端输出、不写任何数据。
+ * ⚠️ 激活即生效：P1 改变全站头像来源（指向本地）。如需回退，停用本插件即可。
  * ---------------------------------------------------------------------------
  *
- * License 说明：上方 GPL-2.0-or-later 为 WordPress 生态惯例占位声明。
- * 最终 License 由 USER 裁定（见记忆仓 OPEN_ITEMS ⑥），裁定后补 LICENSE 全文。
+ * License：GPL-2.0-or-later（已由 USER 于 2026-08-27T17:45 最终裁定，见 OPEN_ITEMS ⑥）。
+ * LICENSE 文件作为发布物料在适当阶段落地，不与 WP.org 发布目标绑定（AUDIT-005 C1）。
  */
 
 // 阻止直接访问。
@@ -40,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.0-skeleton' );
+define( 'BWPC_VERSION', '0.1.1' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
