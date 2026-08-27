@@ -1,39 +1,73 @@
 <?php
 /**
- * 模板：单条评论。
+ * 模板：单条评论（wp_list_comments 回调渲染）。
  *
  * 可被主题覆盖（P9）：
  *   {子主题}/berlin-wp-comments/comment.php
  *
- * 可用变量（TODO[D2] 实现后传入）：
+ * 可用变量（由 Berlin_WP_Comments_Renderer::render_comment 传入）：
  *
  * @var WP_Comment $comment     评论对象。
  * @var array      $args        wp_list_comments 参数。
  * @var int        $depth       层级深度。
- * @var string     $avatar_html 头像 HTML（由 get_avatar() 产出）。
+ * @var string     $avatar_html 头像 HTML（由 get_avatar() 产出，已转义）。
+ * @var bool       $show_avatar 是否显示头像。
  *
  * @package Berlin_WP_Comments
  *
- * 骨架状态：结构占位，无输出。
+ * P2 实现：消费骨架 TODO[D2]。
+ *
+ * ⚠️ 回调协议：本模板输出**未闭合**的 <li>，闭合标签由 wp_list_comments
+ * 的 walker 处理。内部 <article class="bwpc-comment"> 必须自行闭合。
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// TODO[D2]：实现单条评论结构。CP1 立项文件给出的目标形态：
-//
-//   ┌──────────────────────────────┐
-//   │  👤 用户头像   用户名         │
-//   │  评论内容                    │
-//   │  时间 · 回复                 │
-//   └──────────────────────────────┘
-//
-// 实现要点：
-//   - 转义（P8）：作者名 esc_html、URL esc_url、内容走 comment_text()
-//     或 wp_kses_post()，绝不裸输出。
-//   - 回复链接用 get_comment_reply_link()，其 add_below / respond_id
-//     参数必须与容器 id 一致，否则 WP 核心 comment-reply 脚本失效。
-//   - 时间用 get_comment_date() / human_time_diff()，尊重站点时区设置。
-//   - wp_list_comments 回调协议：本模板输出**未闭合**的列表项，
-//     闭合由 end-callback 处理。
+?>
+<li id="comment-<?php comment_ID(); ?>" <?php comment_class( $args['has_children'] ? 'parent' : '' ); ?>>
+	<article id="div-comment-<?php comment_ID(); ?>" class="bwpc-comment">
+		<?php if ( $show_avatar && $avatar_html ) : ?>
+			<div class="bwpc-comment__avatar">
+				<?php echo $avatar_html; // 已由 get_avatar() 转义 ?>
+			</div>
+		<?php endif; ?>
+
+		<div class="bwpc-comment__body">
+			<header class="bwpc-comment__meta">
+				<span class="bwpc-comment__author"><?php comment_author(); // esc_html 内置 ?></span>
+				<time class="bwpc-comment__date" datetime="<?php comment_time( 'c' ); // esc_attr 内置 ?>">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %1$s = 日期, %2$s = 时间 */
+							__( '%1$s %2$s', 'berlin-wp-comments' ),
+							get_comment_date(),
+							get_comment_time()
+						)
+					);
+					?>
+				</time>
+			</header>
+
+			<div class="bwpc-comment__content"><?php comment_text(); // WP 核心转义 + KSES ?></div>
+
+			<footer class="bwpc-comment__actions">
+				<?php
+				// 回复链接：P3 表单需提供 id="bwpc-respond" 的 respond 容器，
+				// 否则 WP 核心 comment-reply 脚本无法定位表单（链接本身照常渲染）。
+				comment_reply_link(
+					array(
+						'add_below'  => 'div-comment',
+						'respond_id' => 'bwpc-respond',
+						'reply_text' => esc_html__( '回复', 'berlin-wp-comments' ),
+						'depth'      => $depth,
+						'max_depth'  => isset( $args['max_depth'] ) ? (int) $args['max_depth'] : 0,
+					),
+					$comment
+				);
+				?>
+			</footer>
+		</div>
+	</article>

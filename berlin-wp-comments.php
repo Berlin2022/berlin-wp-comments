@@ -3,7 +3,7 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       极简 WordPress 原生评论增强插件 —— Shortcode + 本地头像 + 原生评论。WordPress 负责数据与生命周期，本插件只负责呈现与头像。
- * Version:           0.1.1
+ * Version:           0.1.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Berlin
@@ -17,13 +17,16 @@
  * ---------------------------------------------------------------------------
  * 版本声明
  * ---------------------------------------------------------------------------
- * V1_IN_PROGRESS（P1 本地头像已实现）。
+ * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现）。
  *
  * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
  * 已落地：
  *   - P1 本地头像：get_avatar_data 挂钩 + 后台上传字段（user_meta attachment_id），
  *     零 Gravatar 请求（陷阱 A 处理）。
- * 待实现：P2 评论渲染器 + 模板 / P3 表单 / P4 短代码 / P5 分页 / P6 测试与 WP 实机。
+ *   - P2 评论渲染器 + 模板：WP_Comment_Query 取数 → wp_list_comments(callback) 走自有
+ *     模板（templates/comment.php + comments.php）；模板覆盖顺序 子主题→父主题→插件
+ *     （P9）；不使用 comments_template()（陷阱 C）。
+ * 待实现：P3 表单 / P4 短代码 / P5 分页 / P6 测试与 WP 实机。
  * 各阶段进度见记忆仓 03_PLAN/CP2/CP2-001.md。
  *
  * ⚠️ 激活即生效：P1 改变全站头像来源（指向本地）。如需回退，停用本插件即可。
@@ -41,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.1' );
+define( 'BWPC_VERSION', '0.1.2' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

@@ -79,7 +79,7 @@ final class Berlin_WP_Comments_Plugin {
 	 */
 	private function boot() {
 		$this->avatar    = new Berlin_WP_Comments_Avatar();
-		$this->renderer  = new Berlin_WP_Comments_Renderer();
+		$this->renderer  = new Berlin_WP_Comments_Renderer( $this );
 		$this->form      = new Berlin_WP_Comments_Form();
 		$this->shortcode = new Berlin_WP_Comments_Shortcode( $this->renderer, $this->form );
 
@@ -106,37 +106,63 @@ final class Berlin_WP_Comments_Plugin {
 	/**
 	 * 定位模板文件，支持主题覆盖（P9）。
 	 *
-	 * 查找顺序：
+	 * 查找顺序（用户定制不被插件更新覆盖）：
 	 *   1. {子主题}/berlin-wp-comments/{$name}.php
 	 *   2. {父主题}/berlin-wp-comments/{$name}.php
 	 *   3. {插件}/templates/{$name}.php
 	 *
-	 * TODO[D2]：实现查找与缓存。骨架期直接返回插件内路径。
+	 * P2 实现：消费骨架 TODO[D2]。
 	 *
 	 * @param string $name 模板名，不含扩展名。
-	 * @return string 模板绝对路径。
+	 * @return string 模板绝对路径；未找到返回空串。
 	 */
 	public function locate_template( $name ) {
 		$name = sanitize_file_name( $name );
+		$base = 'berlin-wp-comments/' . $name . '.php';
 
-		// TODO[D2]：先查主题目录 berlin-wp-comments/{$name}.php。
-		return BWPC_PLUGIN_DIR . 'templates/' . $name . '.php';
+		// 1. 子主题（最高优先，用户定制不被插件更新覆盖）。
+		$child = get_stylesheet_directory() . '/' . $base;
+		if ( is_readable( $child ) ) {
+			return $child;
+		}
+
+		// 2. 父主题。
+		$parent = get_template_directory() . '/' . $base;
+		if ( is_readable( $parent ) ) {
+			return $parent;
+		}
+
+		// 3. 插件自带模板。
+		$plugin = BWPC_PLUGIN_DIR . 'templates/' . $name . '.php';
+		if ( is_readable( $plugin ) ) {
+			return $plugin;
+		}
+
+		return '';
 	}
 
 	/**
 	 * 渲染模板并返回字符串。
 	 *
-	 * TODO[D2]：实现变量作用域隔离与输出缓冲。
+	 * P2 实现：消费骨架 TODO[D2]。输出缓冲 + 变量作用域隔离（extract EXTR_SKIP）。
 	 *
 	 * @param string $name 模板名。
 	 * @param array  $vars 传入模板的变量。
 	 * @return string
 	 */
 	public function render_template( $name, array $vars = array() ) {
-		unset( $vars ); // 骨架期未使用。
+		$path = $this->locate_template( $name );
+		if ( ! $path ) {
+			return '';
+		}
 
-		// TODO[D2]：ob_start() → include locate_template() → ob_get_clean()。
-		return '';
+		if ( $vars ) {
+			extract( $vars, EXTR_SKIP );
+		}
+
+		ob_start();
+		include $path;
+		return (string) ob_get_clean();
 	}
 
 	/**

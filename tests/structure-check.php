@@ -274,9 +274,9 @@ foreach ( $php_files as $file ) {
 	$todo_count += preg_match_all( '/TODO\[D\d\]/', file_get_contents( $file ) );
 }
 
-// V1 实现期：仍有未实现阶段（P2–P5）遗留 TODO 标记属正常；若全部清空说明超前实现，
+// V1 实现期：仍有未实现阶段（P3–P5）遗留 TODO 标记属正常；若全部清空说明超前实现，
 // 这里只确保骨架纪律文件自身不参与计数。
-bwpc_check( $todo_count >= 0, '剩余阶段化 TODO 标记（共 ' . $todo_count . ' 处，P2–P5 待实现）', '' );
+bwpc_check( $todo_count >= 0, '剩余阶段化 TODO 标记（共 ' . $todo_count . ' 处，P3–P5 待实现）', '' );
 
 // shortcode 必须已注册（接线可验证）。
 $shortcode_src = is_file( $root . '/includes/class-comments-shortcode.php' )
@@ -303,6 +303,46 @@ bwpc_check(
 	false === strpos( $avatar_src, 'META_KEY_URL' ),
 	'头像仅存 attachment_id（禁双写 URL meta，AUDIT-001 ⑤）',
 	'发现 META_KEY_URL 双写残留'
+);
+
+// P2 起：评论渲染器必须已接线（wp_list_comments 驱动，否则列表不渲染）。
+$renderer_src = is_file( $root . '/includes/class-comments-renderer.php' )
+	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-comments-renderer.php' ) )
+	: '';
+bwpc_check(
+	false !== strpos( $renderer_src, 'wp_list_comments' ),
+	'评论渲染器已接线（P2：wp_list_comments 驱动）',
+	'未找到 wp_list_comments'
+);
+
+// P2 起：模板定位必须实现主题覆盖顺序（子主题→父主题→插件），不得裸返回插件路径。
+$plugin_src = is_file( $root . '/includes/class-plugin.php' )
+	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-plugin.php' ) )
+	: '';
+bwpc_check(
+	false !== strpos( $plugin_src, 'get_stylesheet_directory' ) && false !== strpos( $plugin_src, 'get_template_directory' ),
+	'模板覆盖顺序已实现（P2：子主题→父主题→插件）',
+	'locate_template 未实现主题覆盖'
+);
+
+// P2 起：单条评论模板必须产出实际标记（非纯 TODO 占位）。
+$comment_tpl = is_file( $root . '/templates/comment.php' )
+	? file_get_contents( $root . '/templates/comment.php' )
+	: '';
+bwpc_check(
+	false !== strpos( $comment_tpl, 'bwpc-comment' ) && false !== strpos( $comment_tpl, 'comment_ID' ),
+	'单条评论模板已落地（P2：bwpc-comment 标记）',
+	'comment.php 仍为空占位'
+);
+
+// P2 起：容器模板必须产出实际结构（含 $list 输出）。
+$comments_tpl = is_file( $root . '/templates/comments.php' )
+	? file_get_contents( $root . '/templates/comments.php' )
+	: '';
+bwpc_check(
+	false !== strpos( $comments_tpl, 'bwpc' ) && false !== strpos( $comments_tpl, '$list' ),
+	'评论区容器模板已落地（P2：输出 $list）',
+	'comments.php 仍为空占位'
 );
 
 /* -------------------------------------------------------------------------
