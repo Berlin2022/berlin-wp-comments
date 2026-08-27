@@ -70,8 +70,15 @@ class Berlin_WP_Comments_Shortcode {
 	 * @return void
 	 */
 	public function register() {
-		add_shortcode( BWPC_SHORTCODE, array( $this, 'handle' ) );
-		add_shortcode( BWPC_SHORTCODE_ALIAS, array( $this, 'handle' ) );
+		// O1：canonical + alias 均不得静默覆盖已有同名 shortcode handler。
+		// WordPress 的 add_shortcode() 不会自动保护已有注册，故以 shortcode_exists() 守卫：
+		// 若外部（主题/其他插件）已先注册同名标签，保留其 handler，本插件不抢占。
+		if ( ! shortcode_exists( BWPC_SHORTCODE ) ) {
+			add_shortcode( BWPC_SHORTCODE, array( $this, 'handle' ) );
+		}
+		if ( ! shortcode_exists( BWPC_SHORTCODE_ALIAS ) ) {
+			add_shortcode( BWPC_SHORTCODE_ALIAS, array( $this, 'handle' ) );
+		}
 
 		// O9 轻量：wp 钩子预检测页面内容是否含 shortcode（先于 wp_enqueue_scripts，
 		// 资源可正常进入 <head>）；小工具/区块模板等盲区由 handle() 兜底。

@@ -429,6 +429,18 @@ bwpc_check(
 	'normalize_atts 未做边界校验'
 );
 
+// P4 修正（AUDIT-007）：O1 契约——shortcode 注册不得静默覆盖已有同名 handler。
+// register() 必须以 shortcode_exists() 守卫包裹 add_shortcode；否则本插件会抢占外部已注册标签，
+// 与 O1「不静默覆盖他人标签」声明冲突（静态结构存在 ≠ 行为契约已闭合，同 AUDIT-006 性质）。
+bwpc_check(
+	(bool) preg_match( '/if\s*\(\s*!\s*shortcode_exists\(\s*BWPC_SHORTCODE\s*\)\s*\)/', $shortcode_src )
+		&& (bool) preg_match( '/if\s*\(\s*!\s*shortcode_exists\(\s*BWPC_SHORTCODE_ALIAS\s*\)\s*\)/', $shortcode_src )
+		&& false !== strpos( $shortcode_src, 'add_shortcode( BWPC_SHORTCODE' )
+		&& false !== strpos( $shortcode_src, 'add_shortcode( BWPC_SHORTCODE_ALIAS' ),
+	'Shortcode 注册冲突保护（P4/AUDIT-007：O1 不静默覆盖他人 handler，shortcode_exists 守卫）',
+	'register() 未以 shortcode_exists() 守卫包裹 add_shortcode（可能抢占外部同名 handler）'
+);
+
 /* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */
