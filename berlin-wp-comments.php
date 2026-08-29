@@ -17,7 +17,7 @@
  * ---------------------------------------------------------------------------
  * 版本声明
  * ---------------------------------------------------------------------------
- * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现；P5 经 AUDIT-008 局部修正：thread 安全分页 + per_page 消费 page_comments/default_comments_page）。
+ * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现并经 AUDIT-008 局部修正（thread 安全分页 + per_page 消费 page_comments/default_comments_page）+ AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30）；P6 实机验证 O5/O8 进行中）。
  *
  * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
  * 已落地：
@@ -26,7 +26,7 @@
  *   - P2 评论渲染器 + 模板：WP_Comment_Query 取数 → wp_list_comments(callback) 走自有
  *     模板（templates/comment.php + comments.php）；模板覆盖顺序 子主题→父主题→插件
  *     （P9）；不使用 comments_template()（陷阱 C）。
- * 待实现：P6 测试与 WP 实机（⚠️ O5 门禁：原生 cpage 分页须真实 WP 验证后关闭 O5）。AUDIT-008 局部修正已落实（CHK-010）；经 AUDIT-008 Correction Recheck `REJECT — REQUIRED CORRECTION` 发现 collect_thread_descendants 误用数组 parent（违背 WP_Comment_Query 契约），已由 CP3-015 修正（CHK-011：parent__in 修正 + 结构自检 89/89 断言），待 Correction Recheck。
+ * 待实现：P6 实机验证 O5/O8（⚠️ O5 门禁：原生 cpage 分页（comment-page-N 固定链接 + ?cpage=N 解析）须真实 WP 验证后关闭 O5；O8 零 Gravatar 网络请求须真实浏览器实测）。AUDIT-008 局部修正已落实（CHK-010，①②）；经 AUDIT-008 Correction Recheck `REJECT — REQUIRED CORRECTION` 发现 collect_thread_descendants 误用数组 parent（违背 WP_Comment_Query 契约），已由 CP3-015 修正（CHK-011：parent__in 修正 + 结构自检 89/89 断言）；AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30），进入 P6（实机验证 O5/O8）。P6 验证清单见 tests/P6_VERIFICATION.md。
  * 各阶段进度见记忆仓 03_PLAN/CP2/CP2-001.md。
  *
  * ⚠️ 激活即生效：P1 改变全站头像来源（指向本地）。如需回退，停用本插件即可。
