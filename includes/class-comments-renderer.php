@@ -310,6 +310,10 @@ class Berlin_WP_Comments_Renderer {
 	 * 全部后代（所有层级）一并取回，否则 wp_list_comments() 依 comment_parent 建树时
 	 * 父节点缺失、thread 被切断。
 	 *
+	 * 后代批量查询使用 WP_Comment_Query 的 `parent__in`（数组参数）；
+	 * 不得使用 `parent`（仅接受单个 int，数组会被 `$wpdb->prepare('... = %d', ...)` 忽略/报错，
+	 * 导致后代取不回、thread 仍被切断）。AUDIT-008 Correction Recheck 据此修正。
+	 *
 	 * @param int[] $parent_ids 顶层评论 ID 数组。
 	 * @param int   $post_id    对象 ID。
 	 * @return WP_Comment[] 后代评论（不含父本身）。
@@ -329,12 +333,12 @@ class Berlin_WP_Comments_Renderer {
 
 			$children = get_comments(
 				array(
-					'post_id' => $post_id,
-					'status'  => 'approve',
-					'type'    => 'comment',
-					'parent'  => $queue,
-					'order'   => 'ASC',
-					'number'  => 0,
+					'post_id'    => $post_id,
+					'status'     => 'approve',
+					'type'       => 'comment',
+					'parent__in' => $queue,
+					'order'      => 'ASC',
+					'number'     => 0,
 				)
 			);
 

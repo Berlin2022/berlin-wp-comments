@@ -26,7 +26,7 @@
  *   - P2 评论渲染器 + 模板：WP_Comment_Query 取数 → wp_list_comments(callback) 走自有
  *     模板（templates/comment.php + comments.php）；模板覆盖顺序 子主题→父主题→插件
  *     （P9）；不使用 comments_template()（陷阱 C）。
- * 待实现：P6 测试与 WP 实机（⚠️ O5 门禁：原生 cpage 分页须真实 WP 验证后关闭 O5）。AUDIT-008 局部修正已落实（CHK-010），待 Correction Recheck。
+ * 待实现：P6 测试与 WP 实机（⚠️ O5 门禁：原生 cpage 分页须真实 WP 验证后关闭 O5）。AUDIT-008 局部修正已落实（CHK-010）；经 AUDIT-008 Correction Recheck `REJECT — REQUIRED CORRECTION` 发现 collect_thread_descendants 误用数组 parent（违背 WP_Comment_Query 契约），已由 CP3-015 修正（CHK-011：parent__in 修正 + 结构自检 89/89 断言），待 Correction Recheck。
  * 各阶段进度见记忆仓 03_PLAN/CP2/CP2-001.md。
  *
  * ⚠️ 激活即生效：P1 改变全站头像来源（指向本地）。如需回退，停用本插件即可。

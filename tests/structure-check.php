@@ -499,6 +499,17 @@ bwpc_check(
 	'未补齐顶层评论的后代，分页会切断 thread'
 );
 
+// AUDIT-008 Correction Recheck：collect_thread_descendants 批量取后代必须使用
+// WP_Comment_Query 的 parent__in（数组参数）；不得改用数组值的 parent（仅接受单个 int，
+// %d 准备会忽略/报错，导致后代取不回、thread 仍被切断）。结构自检 PASS ≠ 行为契约闭合，
+// 故以显式契约断言锁住该参数，防同类回归。
+bwpc_check(
+	(bool) preg_match( "/'parent__in'\s*=>/", $renderer_src )
+		&& ! (bool) preg_match( "/'parent'\s*=>\s*\\$queue/", $renderer_src ),
+	'后代批量查询用 parent__in（AUDIT-008 Recheck：collect_thread_descendants 不得用数组 parent）',
+	'render_pagination 后代 fetch 未使用 parent__in 或仍误用数组 parent'
+);
+
 // AUDIT-008 REQUIRED CORRECTION ②：per_page() 实际消费 page_comments 总开关。
 bwpc_check(
 	false !== strpos( $renderer_src, 'page_comments' ),

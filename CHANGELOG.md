@@ -9,6 +9,7 @@
 - **P5 分页（OPEN_ITEMS ③，方案 A = 原生 cpage）**：`render_pagination()` 复用 `get_comments_pagenum_link()` 生成 `comment-page-N` / `?cpage=N` 链接，不依赖 `comments_template()` 上下文（陷阱 C）；分页在 `query_comments` 层以 `number`+`offset` 落地，`build_list_html` 不再向 `wp_list_comments` 传 `per_page/page` 避免双重切片；新增 `templates/comments-pager.php`（主题可覆盖，P9）。O5 在真实 WP 验证前仍 BLOCKED。结构自检新增 5 项 P5 原生 cpage 分页断言（现 83/83 全 PASS）。
 - **范围守界**：P5 未注册重写规则（方案 A 重写规则须先真实 Page 实机确认，按 O5 门禁 deferred）；未越权 P6。
 - **AUDIT-008 局部修正（REJECT — REQUIRED CORRECTION，P5 不回滚、不推翻方案）**：① thread 安全分页——`query_comments` 改以「顶层评论（parent=0）」为分页单位（number+offset 落在顶层），新增 `collect_thread_descendants()` 递归补齐每个顶层 thread 的完整后代子树，杜绝把一条 thread 从父节点切到下一页（WP_Comment_Query 默认 hierarchical=false 不自动补全后代）；分页分母改由 `count_top_level_comments()`（顶层 thread 数）推导。② `per_page()` 实际消费 `page_comments`（分页总开关）与 `default_comments_page`（顶层排序方向，'newest'→DESC）；显式 shortcode 覆盖优先。结构自检新增 5 项 AUDIT-008 契约断言（现 88/88 全 PASS）。版本仍 0.1.5（修正不升版，与 AUDIT-007 惯例一致）。
+- **AUDIT-008 Correction Recheck（二次 `REJECT — REQUIRED CORRECTION`，P5 不回滚、不推翻方案）**：`collect_thread_descendants()` 批量取后代误用 `'parent' => $queue`（数组值），违背 WP_Comment_Query 契约（`parent` 仅接受单个 int，数组会被 `$wpdb->prepare('... = %d', ...)` 忽略/报错，导致后代取不回）。修正为 `'parent__in' => $queue`（数组参数）。新增 1 项结构契约断言（88→89）锁住该参数：使用 `parent__in` 且不得出现数组值 `parent`。版本仍 0.1.5；修正锚点建 CHK-011（CHK-009/CHK-010 保留不可变）。
 
 ## [0.1.4] — UNRELEASED
 
