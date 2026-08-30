@@ -315,40 +315,144 @@
 }
 
 /* =========================================================================
- * 10. 输入表单
+ * 10. 评论表单（占位符即标签 / 占位符色 #b3b3b3 / 复选框深色 / 整体美化）
+ *     真实标记（v0.1.12+）：
+ *       <div class="bwpc__form">                 ← 外层包裹（来自 templates/comments.php）
+ *         <form class="bwpc-comment-form">
+ *           <h3 class="bwpc-comment-reply-title">Leave a Comment</h3>
+ *           <p class="comment-form-author">  <label>Name *</label>  <input placeholder="Name *" required /></p>
+ *           <p class="comment-form-email">   <label>Email *</label> <input placeholder="Email *" required /></p>
+ *           <p class="comment-form-url">     <label>Website</label> <input placeholder="Website" /></p>
+ *           <p class="comment-form-comment"> <label>Comment</label> <textarea placeholder="Your comment *" required></textarea></p>
+ *           <p class="comment-form-cookies-consent">
+ *             <input type="checkbox" id="wp-comment-cookies-consent" />
+ *             <label for="wp-comment-cookies-consent">Save my name, email, and website in this browser for the next time I comment.</label>
+ *           </p>
+ *           <p class="form-submit"><input type="submit" class="submit" value="Post Comment" /></p>
+ *         </form>
+ *       </div>
  * ========================================================================= */
-.bwpc__form input[type="text"],
-.bwpc__form input[type="email"],
-.bwpc__form input[type="url"],
-.bwpc__form textarea {
-  padding: 10px 12px;
+
+/* 外层包裹：与评论列表用细线分隔，给表单一个起点 */
+.bwpc__form {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--vosalen-border);
+}
+
+/* 表单内所有 <p>：margin-block-end 0.5em（用户指定，统一垂直节奏） */
+.bwpc-comment-form p {
+  margin: 0 0 0.5em;
+  margin-block-end: 0.5em;
+}
+.bwpc-comment-form p:last-child { margin-bottom: 0; }
+
+/* 字段标签（author/email/url/comment）：视觉隐藏，保留 a11y。
+   视觉标签由 input/textarea 的 placeholder 承担（颜色 #b3b3b3），
+   实现"文字放到 label 内"的占位符即标签效果，输入时自动消失。 */
+.bwpc-comment-form .comment-form-author > label,
+.bwpc-comment-form .comment-form-email > label,
+.bwpc-comment-form .comment-form-url > label,
+.bwpc-comment-form .comment-form-comment > label {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 输入框 / 文本域 */
+.bwpc-comment-form input[type="text"],
+.bwpc-comment-form input[type="email"],
+.bwpc-comment-form input[type="url"],
+.bwpc-comment-form textarea {
+  width: 100%;
+  padding: 11px 13px;
   border: 1px solid var(--vosalen-border);
   border-radius: var(--vosalen-radius);
-  min-height: 42px;
   background: #fff;
   color: var(--vosalen-text);
+  font-size: 0.95em;
+  line-height: 1.5;
+  min-height: 44px;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.bwpc__form textarea { min-height: 120px; resize: vertical; }
-.bwpc__form input:focus,
-.bwpc__form textarea:focus {
+.bwpc-comment-form textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+/* 占位符颜色 #b3b3b3（用户指定） */
+.bwpc-comment-form input::placeholder,
+.bwpc-comment-form textarea::placeholder {
+  color: #b3b3b3;
+  opacity: 1;
+}
+/* 焦点态：主色边框 + 柔光环 */
+.bwpc-comment-form input:focus,
+.bwpc-comment-form textarea:focus {
   outline: none;
   border-color: var(--bwpc-accent);
   box-shadow: 0 0 0 3px var(--vosalen-accent-soft);
 }
-.bwpc__form .submit,
-.bwpc__form input[type="submit"] {
+
+/* cookies-consent 复选框：垂直对齐 + 间距 + 深色文字（用户要求"颜色深一些"） */
+.bwpc-comment-form .comment-form-cookies-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.88em;
+  line-height: 1.5;
+  color: #374151;
+}
+.bwpc-comment-form .comment-form-cookies-consent input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--bwpc-accent);
+  cursor: pointer;
+}
+.bwpc-comment-form .comment-form-cookies-consent label {
+  cursor: pointer;
+  font-weight: 400;
+  color: inherit;
+}
+
+/* 提交按钮 */
+.bwpc-comment-form .form-submit {
+  margin-top: 0.75em;
+}
+.bwpc-comment-form .submit,
+.bwpc-comment-form input[type="submit"] {
   background: var(--bwpc-accent);
   color: var(--vosalen-accent-ink);
   border: 0;
   border-radius: var(--vosalen-radius);
-  padding: 11px 22px;
+  padding: 11px 24px;
   font-weight: 600;
+  font-size: 0.95em;
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.bwpc__form .submit:hover,
-.bwpc__form input[type="submit"]:hover { background: #A8332A; }
+.bwpc-comment-form .submit:hover,
+.bwpc-comment-form input[type="submit"]:hover { background: #A8332A; }
+
+/* 回复标题 */
+.bwpc-comment-reply-title {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0 0 0.6em;
+  color: var(--vosalen-text);
+}
+/* "Cancel reply" 小链 */
+.bwpc-cancel-reply {
+  font-size: 0.8em;
+  color: var(--vosalen-muted);
+  margin-left: 8px;
+}
 
 /* =========================================================================
  * 11. 分页（横排 / 固定长宽 / 圆角 / 当前页背景高亮）
@@ -437,4 +541,15 @@
   }
 
   .bwpc-comment__media img { width: 56px; height: 56px; }
+
+  /* 表单移动端：缩紧 padding / 字号 */
+  .bwpc__form { margin-top: 22px; padding-top: 18px; }
+  .bwpc-comment-form input[type="text"],
+  .bwpc-comment-form input[type="email"],
+  .bwpc-comment-form input[type="url"],
+  .bwpc-comment-form textarea { font-size: 0.92em; min-height: 42px; }
+  .bwpc-comment-form textarea { min-height: 110px; }
+  .bwpc-comment-form .comment-form-cookies-consent { font-size: 0.85em; }
 }
+
+

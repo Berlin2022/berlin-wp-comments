@@ -110,14 +110,19 @@ class Berlin_WP_Comments_Form {
 			'cancel_reply_before' => ' <span class="bwpc-cancel-reply">',
 			'cancel_reply_after'  => '</span>',
 			// 接管字段标签，强制英文（否则 zh_CN 站点下核心翻成"名/电子邮件/网站"）。
+			// v0.1.12：给 input 加 placeholder 作视觉标签（"文字放到 label 内"），
+			// 原 <label> 仍渲染但由 CSS sr-only 隐藏以保 a11y。占位符色 #b3b3b3。
 			'fields'              => array(
 				'author' => '<p class="comment-form-author"><label for="author">' . __( 'Name', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
-				            '<input id="author" name="author" type="text" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>',
+				            '<input id="author" name="author" type="text" placeholder="' . esc_attr__( 'Name *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>',
 				'email'  => '<p class="comment-form-email"><label for="email">' . __( 'Email', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
-				            '<input id="email" name="email" type="text" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>',
+				            '<input id="email" name="email" type="text" placeholder="' . esc_attr__( 'Email *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>',
 				'url'    => '<p class="comment-form-url"><label for="url">' . __( 'Website', 'berlin-wp-comments' ) . '</label> ' .
-				            '<input id="url" name="url" type="text" value="' . esc_attr( $commenter['comment_author_url'] ) . '" size="30" maxlength="200" /></p>',
+				            '<input id="url" name="url" type="text" placeholder="' . esc_attr__( 'Website', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_url'] ) . '" size="30" maxlength="200" /></p>',
 			),
+			// 接管评论正文：加 placeholder "Your comment *"，使标签视觉放进输入框。
+			'comment_field'       => '<p class="comment-form-comment"><label for="comment">' . _x( 'Comment', 'noun', 'berlin-wp-comments' ) . '</label> ' .
+			                          '<textarea id="comment" name="comment" placeholder="' . esc_attr__( 'Your comment *', 'berlin-wp-comments' ) . '" cols="45" rows="8" maxlength="65525" required="required" aria-required="true"></textarea></p>',
 		);
 
 
