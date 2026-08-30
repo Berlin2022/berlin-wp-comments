@@ -55,6 +55,44 @@
 
 ---
 
+## P6 实机发现（2026-08-30，vosalen.com 真实 WP）
+
+### 发现 1 — O5 分页链接形态已实机确认 ✅
+真实产品页 `https://www.vosalen.com/product/dark-lion-phone-case/` 点击第 2 页，URL 为
+`…/product/dark-lion-phone-case/comment-page-2/#comments`（第 1 页 `comment-page-1/#comments`）。
+符合 O5 步骤 2（漂亮固定链接形态，由 `get_comments_pagenum_link()` 生成）。
+→ O5 步骤 2 **PASS（实机）**；O5 整体仍 BLOCKED，待补全步骤 3–6（cpage 解析 / thread 不被切断 / 排序方向 / 总开关）。
+
+> 备注：分页锚点为原生 `#comments`（核心 `get_comments_pagenum_link()` 固定追加），
+> 插件容器 id 为 `bwpc-comments`。点击分页仍正常加载目标页，仅锚点跳转无对应元素（滚动到顶），
+> 不影响分页功能；如需丝滑滚动可后续把锚点改为 `#bwpc-comments`（核心无直接过滤器，待评估）。
+
+### 发现 2 — Reply 点击整页重载（非内联回复）🔴 → 已修正
+真实页点击 **Reply** 后 URL 变为 `…?replytocom=7#bwpc-respond` 并**整页重新加载**，
+未出现原生内联回复（表单内联移动、无刷新）。根因（CP3 定位）：
+
+1. `templates/comment.php` 的 `comment_reply_link()` 用 `respond_id => 'bwpc-respond'`，
+   但 `comment_form()` 实际输出的包裹层 id 为 `respond`（核心默认，无 `id_respond` 参数）。
+   WP 核心 `comment-reply.js` 的 `moveForm()` 据此 id 定位表单 → 找不到 `bwpc-respond` → 失效。
+2. `includes/class-comment-form.php` 的 `enqueue_reply_script()` 以
+   `get_option('thread_comments')` 为闸门；vosalen.com 该开关未启用（或与 `thread_comments_depth`
+   不一致）→ 核心 `comment-reply.js` **未入队** → Reply 链接退化为纯 `<a href="?replytocom=N">` → 整页导航。
+
+**修正（commit 待推，目标 0.1.6）：**
+- `templates/comment.php`：`respond_id => 'respond'`（与 `comment_form()` 包裹层一致）。
+- `class-comment-form.php::enqueue_reply_script()`：移除 `thread_comments` 闸门，**无条件**
+  `wp_enqueue_script('comment-reply')`（本插件始终输出 Reply 链接，故始终需要该脚本做内联拦截）。
+- `class-comment-form.php`：`title_reply_before` 的 `id` 由 `bwpc-reply-title` 改回核心预期的
+  `reply-title`，使内联回复时「Reply to <作者>」标题切换正常（cosmetic，非阻断）。
+
+**预期实机效果**：点击 Reply → 表单内联移动到被回复评论下方、URL 不变、无整页刷新
+（零自有 JS，复用核心 `comment-reply`，符合 CP1 约束 C5）。提交后照常回 wp-comments-post.php。
+
+> ⚠️ 该修正**不属 O5/O8 门禁范围**，但为「P6 实机验收质量」必修项；上线后须在真实 WP 复核
+> Reply 内联行为，再将 P6 整体推至 `V1_WP_VERIFIED`。
+
+---
+
 ## 验收判定
 
 | 项 | 通过条件 | 状态 |

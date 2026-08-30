@@ -101,7 +101,7 @@ class Berlin_WP_Comments_Form {
 
 		$form_args = array(
 			'title_reply'         => __( 'Leave a Comment', 'berlin-wp-comments' ),
-			'title_reply_before'  => '<h3 id="bwpc-reply-title" class="bwpc-comment-reply-title">',
+			'title_reply_before'  => '<h3 id="reply-title" class="bwpc-comment-reply-title">',
 			'title_reply_after'   => '</h3>',
 			'label_submit'        => __( 'Post Comment', 'berlin-wp-comments' ),
 			'cancel_reply_link'   => __( 'Cancel reply', 'berlin-wp-comments' ),
@@ -144,15 +144,22 @@ class Berlin_WP_Comments_Form {
 	}
 
 	/**
-	 * 条件加载核心评论回复脚本（O4 线程回复）。
+	 * 加载核心评论回复脚本（O4 线程回复）。
 	 *
-	 * 仅当站点启用线程评论时入队；脚本由 WP 在页脚输出。
+	 * 始终入队 WP 核心 comment-reply 脚本：本插件**始终**输出 Reply 链接
+	 * （无论站点 Settings → Discussion 的「启用嵌套/线程评论」开关状态），
+	 * 该脚本负责把表单内联移动到被回复评论下方、并拦截点击避免整页跳转。
+	 *
+	 * 旧逻辑以 get_option('thread_comments') 为闸门，会导致该开关关闭时
+	 * 脚本不入队 → 点击 Reply 退化为整页导航（?replytocom=N#respond）而非
+	 * 原生内联回复。改为无条件入队（仅当评论区开放时由 render() 调用到此）。
+	 *
+	 * 配合 templates/comment.php 的 respond_id='respond'（与 comment_form()
+	 * 实际包裹层 id 一致），实现零自有 JS 的内联回复（CP1 约束 C5）。
 	 *
 	 * @return void
 	 */
 	protected function enqueue_reply_script() {
-		if ( get_option( 'thread_comments' ) ) {
-			wp_enqueue_script( 'comment-reply' );
-		}
+		wp_enqueue_script( 'comment-reply' );
 	}
 }

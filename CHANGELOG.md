@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.6] — UNRELEASED
+
+> P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。
+
+- **Reply 内联回复修正（P6 实机发现）**：真实页点击 Reply 触发整页重载（`?replytocom=N#bwpc-respond`）而非原生内联回复。根因：① `templates/comment.php` 的 `comment_reply_link()` 用 `respond_id => 'bwpc-respond'`，但 `comment_form()` 实际包裹层 id 为 `respond`（核心默认，`moveForm()` 据此定位）；② `enqueue_reply_script()` 以 `get_option('thread_comments')` 为闸门，站点未启用该开关时核心 `comment-reply.js` 未入队。修正：`respond_id => 'respond'`；`enqueue_reply_script()` 移除闸门、**无条件** `wp_enqueue_script('comment-reply')`（本插件始终输出 Reply 链接，故始终需要该脚本拦截整页导航）；`title_reply_before` 的 `id` 改回核心预期的 `reply-title` 使内联回复标题切换正常。零自有 JS，复用核心 `comment-reply`（CP1 约束 C5）。O5 步骤 2 分页链接形态已实机确认（`comment-page-2/#comments`）。
+
 ## [0.1.5] — UNRELEASED
 
 > 阶段：V1 实现期 P1–P5 已落地（P6 测试与 WP 实机 待做）。⚠️ O5 门禁：原生 cpage 分页须 P6 真实 WP 验证后关闭 O5。

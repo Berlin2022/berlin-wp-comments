@@ -17,7 +17,7 @@
  * ---------------------------------------------------------------------------
  * 版本声明
  * ---------------------------------------------------------------------------
- * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现并经 AUDIT-008 局部修正（thread 安全分页 + per_page 消费 page_comments/default_comments_page）+ AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30）；P6 实机验证 O5/O8 进行中）。
+ * V1_IN_PROGRESS（P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现并经 AUDIT-008 局部修正（thread 安全分页 + per_page 消费 page_comments/default_comments_page）+ AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30）；P6 实机验证 O5/O8 进行中）。0.1.6：修正 Reply 点击整页重载 → 原生内联回复（respond_id 对齐核心包裹层 + 无条件入队 comment-reply 脚本；P6 实机发现 2026-08-30）。
  *
  * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
  * 已落地：
@@ -44,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.5' );
+define( 'BWPC_VERSION', '0.1.6' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

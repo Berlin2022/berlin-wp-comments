@@ -55,12 +55,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 			<footer class="bwpc-comment__actions">
 				<?php
-				// 回复链接：P3 表单需提供 id="bwpc-respond" 的 respond 容器，
-				// 否则 WP 核心 comment-reply 脚本无法定位表单（链接本身照常渲染）。
-				comment_reply_link(
-					array(
-						'add_below'  => 'div-comment',
-						'respond_id' => 'bwpc-respond',
+			// 回复链接：respond_id 必须与 comment_form() 实际输出的包裹层 id 一致。
+			// 核心 comment_form() 默认输出 <div id="respond">，且 WP 核心
+			// comment-reply.js 的 moveForm() 据此 id 定位并内联移动表单；
+			// 若此处写成 'bwpc-respond'（实际不存在该 id），moveForm 找不到
+			// 容器 → 点击 Reply 退化为整页跳转（?replytocom=N#...）而非内联回复。
+			comment_reply_link(
+				array(
+					'add_below'  => 'div-comment',
+					'respond_id' => 'respond',
 						'reply_text' => esc_html__( 'Reply', 'berlin-wp-comments' ),
 						'depth'      => $depth,
 						'max_depth'  => isset( $args['max_depth'] ) ? (int) $args['max_depth'] : 0,
