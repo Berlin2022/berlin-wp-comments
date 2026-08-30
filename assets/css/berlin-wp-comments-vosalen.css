@@ -1,0 +1,395 @@
+/*
+ * berlin-wp-comments — 内置 B2B 视觉主题（v0.1.12 起）
+ * ------------------------------------------------------------
+ * 作用域：仅 .bwpc* 命名空间（插件输出），不污染主题。
+ * 设计基线：Made-in-China / Alibaba 主流 B2B/B2C 评论板块。
+ *   - 头像圆形（浅米色底，姓名首字母居中）
+ *   - 用户名粗体 + 右侧 5 星(橙) + 日期(浅灰) 一行
+ *   - 元数据行：国旗 + 国家名 / Verified purchase(绿对勾) / Repeat buyer(浅米色 chip)
+ *   - 评论正文 + 评论附图缩略图
+ *   - 产品订单条：浅灰背景 + 图标 + 价格 + See product details 链接
+ *   - 底部 Helpful(N) 灰链接
+ *   - 评论之间细灰分隔线
+ *
+ * 加载：由插件 enqueue_assets() 在 comments.css 之后自动入队（依赖 bwpc-comments）。
+ * 站点层仍可用主题 Additional CSS 覆盖 .bwpc*（特异性同级、后出者胜）。
+ *
+ * 调参：只改 :root 变量即可全站套用品牌。
+ * 钩子：用 [data-bwpc-*] 属性选择器为后续 ACF/meta 扩展做兜底——字段不存在就静默跳过。
+ */
+
+/* =========================================================================
+ * 1. 品牌变量（B2B 暖橙红主色，参考 Made-in-China / Alibaba）
+ * ========================================================================= */
+:root {
+  /* —— 品牌主色 —— */
+  --vosalen-accent:        #C73E2D;   /* 暖橙红，参考 MIC 主色 */
+  --vosalen-accent-ink:    #ffffff;   /* 主色上的文字 */
+  --vosalen-accent-soft:   #FBE9E6;   /* 主色的极浅底（hover/选中态） */
+
+  /* —— 状态色 —— */
+  --vosalen-star:          #FB923C;   /* 5 星行，亮橙 */
+  --vosalen-verified:      #16A34A;   /* Verified 绿对勾 */
+  --vosalen-chip-bg:       #FFF7ED;   /* Repeat buyer chip 背景 */
+  --vosalen-chip-ink:      #B45309;   /* Repeat buyer chip 文字 */
+
+  /* —— 中性色 —— */
+  --vosalen-text:          #1F2937;   /* 主文本 */
+  --vosalen-muted:         #6B7280;   /* 次要文本（日期、Helpful 链接） */
+  --vosalen-border:        #E5E7EB;   /* 分隔线/边框 */
+  --vosalen-strip-bg:      #F5F5F5;   /* 产品订单条背景 */
+  --vosalen-avatar-bg:     #FFF1EA;   /* 头像浅米底 */
+
+  /* —— 度量 —— */
+  --vosalen-radius:        6px;
+  --vosalen-gap:           18px;
+  --vosalen-content-max:   860px;
+  --vosalen-font:          inherit;
+}
+
+/* =========================================================================
+ * 2. 把品牌变量注入插件命名空间（覆盖插件默认 --bwpc-*）
+ * ========================================================================= */
+.bwpc {
+  --bwpc-accent: var(--vosalen-accent);
+  --bwpc-border: var(--vosalen-border);
+  --bwpc-muted:  var(--vosalen-muted);
+
+  font-family: var(--vosalen-font);
+  max-width: var(--vosalen-content-max);
+  margin: 36px 0;
+  color: var(--vosalen-text);
+}
+
+/* =========================================================================
+ * 3. 标题（"X Comments"）
+ * ========================================================================= */
+.bwpc__title {
+  font-size: 1.35em;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--vosalen-border);
+}
+
+/* =========================================================================
+ * 4. 评论卡片：左 60px 头像列 + 右主内容列（grid 两栏）
+ * ========================================================================= */
+.bwpc-comment {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: var(--vosalen-gap);
+  padding: 22px 0;
+  border-bottom: 1px solid var(--vosalen-border);
+}
+.bwpc-comment:last-child { border-bottom: 0; }
+
+/* —— 头像 —— */
+.bwpc-comment__avatar img,
+.bwpc-comment__avatar .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+/* 头像 fallback：当没有 Gravatar 时插件可能输出首字母——给首字母兜底样式 */
+.bwpc-comment__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--vosalen-avatar-bg);
+  color: var(--vosalen-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1.05em;
+  letter-spacing: 0.02em;
+}
+
+/* —— 头部行：用户名 + 5 星 + 日期 —— */
+.bwpc-comment__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.bwpc-comment__author {
+  font-weight: 600;
+  color: var(--vosalen-text);
+  text-decoration: none;
+}
+.bwpc-comment__author:hover { color: var(--vosalen-accent); }
+
+/* 5 星（B2B 风格：星级在用户名右侧紧贴） */
+.bwpc-comment__rating {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 0.95em;
+  line-height: 1;
+  color: var(--vosalen-star);
+  letter-spacing: 1px;
+}
+.bwpc-comment__rating .star { display: inline-block; }
+.bwpc-comment__rating .star--empty { color: #E5E7EB; }
+
+.bwpc-comment__date {
+  margin-left: auto;
+  color: var(--vosalen-muted);
+  font-size: 0.85em;
+}
+
+/* =========================================================================
+ * 5. 元数据行（属性钩子：只有站点 ACF/meta 输出对应 data-* 才显示）
+ *    - data-bwpc-country="United Arab Emirates"  → 国旗 + 国家名
+ *    - data-bwpc-verified="1"                    → ✓ Verified purchase
+ *    - data-bwpc-repeat-buyer="1"                → Repeat buyer chip
+ * ========================================================================= */
+.bwpc-comment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 6px 0 10px;
+  font-size: 0.85em;
+  color: var(--vosalen-muted);
+}
+.bwpc-comment__meta > * { display: inline-flex; align-items: center; gap: 6px; }
+
+.bwpc-comment__country::before {
+  content: attr(data-bwpc-flag);     /* 国旗 emoji，由站点输出 */
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.bwpc-comment__verified::before {
+  content: "✓";
+  color: var(--vosalen-verified);
+  font-weight: 700;
+}
+
+.bwpc-comment__chip {
+  background: var(--vosalen-chip-bg);
+  color: var(--vosalen-chip-ink);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.82em;
+  font-weight: 500;
+}
+
+/* =========================================================================
+ * 6. 评论正文 + 评论附图
+ * ========================================================================= */
+.bwpc-comment__content {
+  font-size: 0.98em;
+  line-height: 1.65;
+  color: var(--vosalen-text);
+  margin: 6px 0 10px;
+}
+.bwpc-comment__content p { margin: 0 0 8px; }
+.bwpc-comment__content p:last-child { margin-bottom: 0; }
+
+/* 评论附图（B2B 风格：小缩略图横排，最多 5 张） */
+.bwpc-comment__media {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+.bwpc-comment__media img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--vosalen-border);
+  background: #fff;
+}
+
+/* =========================================================================
+ * 7. 产品订单条（属性钩子：data-bwpc-product / data-bwpc-price-range / data-bwpc-product-url）
+ *    示例：<div class="bwpc-comment__product-strip"
+ *              data-bwpc-product="Kathy Delivered Filters"
+ *              data-bwpc-price-range="$49-59"
+ *              data-bwpc-product-url="/product/...">
+ * ========================================================================= */
+.bwpc-comment__product-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--vosalen-strip-bg);
+  border-radius: var(--vosalen-radius);
+  padding: 8px 12px;
+  margin: 10px 0 12px;
+  font-size: 0.88em;
+  color: var(--vosalen-text);
+}
+.bwpc-comment__product-strip::before {
+  content: "📦";                       /* 商品图标 emoji */
+  font-size: 1.05em;
+  line-height: 1;
+}
+.bwpc-comment__product-strip .price {
+  font-weight: 600;
+  margin-right: auto;                   /* 把右侧链接推到末尾 */
+}
+.bwpc-comment__product-strip .link {
+  color: var(--vosalen-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bwpc-comment__product-strip .link:hover { text-decoration: underline; }
+
+/* =========================================================================
+ * 8. 底部行：Reply 描边按钮 + Helpful(N) 链接
+ * ========================================================================= */
+.bwpc-comment__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 0.85em;
+}
+
+/* Reply：由文字链改为描边按钮 */
+.bwpc-comment__actions a.reply,
+.bwpc-comment__actions .comment-reply-link {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--bwpc-accent);
+  color: var(--bwpc-accent);
+  border-radius: var(--vosalen-radius);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.bwpc-comment__actions a.reply:hover,
+.bwpc-comment__actions .comment-reply-link:hover {
+  background: var(--bwpc-accent);
+  color: var(--vosalen-accent-ink);
+}
+
+/* Helpful(N)：灰文字 + 拇指图标 */
+.bwpc-comment__helpful {
+  color: var(--vosalen-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bwpc-comment__helpful::before {
+  content: "👍";
+  font-size: 1em;
+  line-height: 1;
+}
+.bwpc-comment__helpful:hover { color: var(--vosalen-accent); }
+
+/* =========================================================================
+ * 9. 嵌套回复缩进（B2B 风格：左缩进 + 左侧细线）
+ * ========================================================================= */
+.bwpc .children {
+  margin-left: 32px;
+  padding-left: 22px;
+  border-left: 2px solid var(--vosalen-border);
+}
+.bwpc .children .bwpc-comment {
+  padding: 16px 0;
+  border-bottom: 0;
+}
+
+/* =========================================================================
+ * 10. 输入表单
+ * ========================================================================= */
+.bwpc__form input[type="text"],
+.bwpc__form input[type="email"],
+.bwpc__form input[type="url"],
+.bwpc__form textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--vosalen-border);
+  border-radius: var(--vosalen-radius);
+  min-height: 42px;
+  background: #fff;
+  color: var(--vosalen-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.bwpc__form textarea { min-height: 120px; resize: vertical; }
+.bwpc__form input:focus,
+.bwpc__form textarea:focus {
+  outline: none;
+  border-color: var(--bwpc-accent);
+  box-shadow: 0 0 0 3px var(--vosalen-accent-soft);
+}
+.bwpc__form .submit,
+.bwpc__form input[type="submit"] {
+  background: var(--bwpc-accent);
+  color: var(--vosalen-accent-ink);
+  border: 0;
+  border-radius: var(--vosalen-radius);
+  padding: 11px 22px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.bwpc__form .submit:hover,
+.bwpc__form input[type="submit"]:hover { background: #A8332A; }
+
+/* =========================================================================
+ * 11. 分页
+ * ========================================================================= */
+.bwpc__pager a,
+.bwpc__pager .current,
+.bwpc__pager span {
+  display: inline-block;
+  padding: 7px 12px;
+  border: 1px solid var(--vosalen-border);
+  border-radius: var(--vosalen-radius);
+  margin-right: 4px;
+  text-decoration: none;
+  color: var(--vosalen-text);
+}
+.bwpc__pager .current {
+  background: var(--bwpc-accent);
+  color: var(--vosalen-accent-ink);
+  border-color: var(--bwpc-accent);
+}
+.bwpc__pager a:hover {
+  background: var(--vosalen-accent-soft);
+  border-color: var(--bwpc-accent);
+}
+
+/* =========================================================================
+ * 12. 空态
+ * ========================================================================= */
+.bwpc__empty {
+  font-style: normal;
+  color: var(--vosalen-muted);
+  padding: 24px 0;
+}
+
+/* =========================================================================
+ * 13. 移动端（≤600px）：单列堆叠，缩紧间距
+ * ========================================================================= */
+@media (max-width: 600px) {
+  .bwpc {
+    --vosalen-content-max: 100%;
+    margin: 22px 0;
+  }
+  .bwpc__title { font-size: 1.2em; }
+
+  .bwpc-comment {
+    grid-template-columns: 40px 1fr;
+    gap: 10px;
+    padding: 16px 0;
+  }
+  .bwpc-comment__avatar,
+  .bwpc-comment__avatar img { width: 36px; height: 36px; font-size: 0.95em; }
+
+  .bwpc-comment__date { width: 100%; margin-left: 0; text-align: left; }
+
+  .bwpc .children {
+    margin-left: 14px;
+    padding-left: 12px;
+    border-left-width: 1px;
+  }
+
+  .bwpc-comment__media img { width: 56px; height: 56px; }
+}

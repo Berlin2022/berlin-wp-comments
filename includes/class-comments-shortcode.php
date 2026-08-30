@@ -197,5 +197,15 @@ class Berlin_WP_Comments_Shortcode {
 			BWPC_VERSION,
 			'all'
 		);
+
+		// v0.1.12: 内置 B2B 视觉主题（设计基线 = Vosalen / Made-in-China / Alibaba 主流评论板块）。
+		// 依赖 bwpc-comments，保证在其后输出；站点层仍可用 Additional CSS 覆盖 .bwpc* 命名空间。
+		wp_enqueue_style(
+			'bwpc-comments-vosalen',
+			BWPC_PLUGIN_URL . 'assets/css/berlin-wp-comments-vosalen.css',
+			array( 'bwpc-comments' ),
+			BWPC_VERSION,
+			'all'
+		);
 	}
 }

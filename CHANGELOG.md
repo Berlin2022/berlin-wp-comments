@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.12] — UNRELEASED
+
+> 内置 B2B 视觉主题（SI-001 成果并入核心，撤销原「站点层 override」红线）。
+
+- **内置评论区视觉主题 `berlin-wp-comments-vosalen.css`**：将原 SI-001「站点层 override」成果转为插件内置默认样式（设计基线参考 Made-in-China / Alibaba 主流 B2B 评论板块：圆形头像、5 星、国家/Verified/Repeat buyer 元数据、产品订单条、Helpful）。`enqueue_assets()` 在加载 `comments.css` 后自动加载本主题（依赖 `bwpc-comments`，保证输出顺序）。站点层仍可用主题 Additional CSS 覆盖 `.bwpc*` 命名空间，不锁定视觉。品牌色等以 `:root` CSS 变量抽离，便于站点定制。
+
 ## [0.1.11] — 2026-08-30 (V1 首发)
 
 > P6 实机根因修复（2026-08-30，vosalen.com 真实 WP，探针数据驱动定位）。本版本对应 V1_WP_VERIFIED 实机验收通过，作为首个正式发布 tag `v0.1.11`。
