@@ -62,6 +62,24 @@
 }
 
 /* =========================================================================
+ * 2.5 列表基线：清掉 WP / 主题默认给 <li> 加的黑点与序号
+ *    - 评论 <ol class="comment-list"> 的 <li class="comment even thread-even depth-1">
+ *    - 分页 <ul class="bwpc-pager__list"> 的 <li class="bwpc-pager__item">
+ *    - 嵌套回复 <ul class="children">
+ *  作用域锁定 .bwpc，不污染主题其它列表。
+ * ========================================================================= */
+.bwpc ol,
+.bwpc ul {
+  list-style: none;
+}
+.bwpc li {
+  list-style: none;
+}
+.bwpc li::marker {
+  content: none;
+}
+
+/* =========================================================================
  * 3. 标题（"X Comments"）
  * ========================================================================= */
 .bwpc__title {
@@ -333,25 +351,52 @@
 .bwpc__form input[type="submit"]:hover { background: #A8332A; }
 
 /* =========================================================================
- * 11. 分页
+ * 11. 分页（横排 / 固定长宽 / 圆角 / 当前页背景高亮）
+ *     真实标记：<nav class="bwpc__pager"> > <ul class="bwpc-pager__list">
+ *       > <li class="bwpc-pager__item [is-current]">
+ *       >   <span class="bwpc-pager__current"> / <a class="bwpc-pager__link">
  * ========================================================================= */
-.bwpc__pager a,
-.bwpc__pager .current,
-.bwpc__pager span {
-  display: inline-block;
-  padding: 7px 12px;
+.bwpc__pager {
+  margin: 22px 0 0;
+}
+/* 横排：用 flex 把分页项排成一行（窄屏自动换行） */
+.bwpc-pager__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;   /* 兜底去黑点（§2.5 已清，这里双保险） */
+  margin: 0;
+  padding: 0;
+}
+.bwpc-pager__item {
+  list-style: none;
+}
+/* 每个页码：固定长宽 + 圆角 */
+.bwpc-pager__link,
+.bwpc-pager__current {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--vosalen-border);
   border-radius: var(--vosalen-radius);
-  margin-right: 4px;
   text-decoration: none;
   color: var(--vosalen-text);
+  font-size: 0.9em;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.bwpc__pager .current {
+/* 当前页：背景色高亮 */
+.bwpc-pager__current {
   background: var(--bwpc-accent);
   color: var(--vosalen-accent-ink);
   border-color: var(--bwpc-accent);
+  font-weight: 600;
 }
-.bwpc__pager a:hover {
+/* 非当前页 hover */
+.bwpc-pager__link:hover {
   background: var(--vosalen-accent-soft);
   border-color: var(--bwpc-accent);
 }
