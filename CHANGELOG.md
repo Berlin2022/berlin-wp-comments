@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.10] — UNRELEASED
+
+> P6 实机诊断探针（2026-08-30，vosalen.com 真实 WP）。
+
+- **运行期调试探针 `?bwpc_debug=1`（仅管理员）**：`render_list()` 在管理员访问且带 `?bwpc_debug=1` 时输出红色诊断面板，暴露真实运行期数据——`BWPC_VERSION`、`has_get_root_ids`、`all_count`、`all_types`（comment_type 分布）、`all_parents`（comment_parent 分布）、`root_ids`、`count_comments`、`per_page`、`cpage`、`opt_page_comments/comments_per_page/default_comments_page`、`query_comments_count`、`rendered_list_empty`、样本评论字段。双重用途：①定位「有计数却无内容」真实根因（尤指评论 `comment_type` 非 `'comment'` 或 `comment_parent` 数据异常）；②作为部署生效试纸——若线上显示该红色面板，证明含 `get_root_ids` 的新代码已真正加载，否则仍跑旧版（OPcache 未失效 / 路径错 / 重复插件目录）。本次仅新增诊断，**未改动任何渲染逻辑**，可安全上线。
+
 ## [0.1.9] — UNRELEASED
 
 > P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。

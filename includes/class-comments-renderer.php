@@ -72,6 +72,13 @@ class Berlin_WP_Comments_Renderer {
 	public function render_list( array $args ) {
 		$post_id = $this->resolve_post_id( $args );
 
+		// 调试探针（?bwpc_debug=1，仅管理员）：输出真实运行期数据，定位
+		// 「有计数却无内容 / 空分页」类实机问题。同时作为部署生效试纸——
+		// 若线上显示本红色面板，说明含 get_root_ids 的新代码已真正生效。
+		if ( ! empty( $_GET['bwpc_debug'] ) && current_user_can( 'manage_options' ) ) {
+			return $this->debug_panel( $post_id, $args );
+		}
+
 		// ④ 仅当前对象；无有效对象则不渲染。
 		if ( ! $post_id ) {
 			return '';
@@ -100,6 +107,58 @@ class Berlin_WP_Comments_Renderer {
 				'count' => $count,
 			)
 		);
+	}
+
+	/**
+	 * 调试探针面板（?bwpc_debug=1，仅管理员）。
+	 *
+	 * 输出真实运行期数据，用于定位「有计数却无内容 / 空分页」类实机问题：
+	 * 实际取回的评论数、comment_type 分布、comment_parent 分布、根评论判定、
+	 * 分页参数与 query_comments 实际返回条数。
+	 *
+	 * @param int   $post_id 解析到的对象 ID。
+	 * @param array $args    参数。
+	 * @return string 调试 HTML。
+	 */
+	protected function debug_panel( $post_id, array $args ) {
+		$out = array(
+			'BWPC_VERSION'       => defined( 'BWPC_VERSION' ) ? BWPC_VERSION : '(undefined)',
+			'has_get_root_ids'   => method_exists( $this, 'get_root_ids' ),
+			'post_id'            => $post_id,
+			'post_type'          => $post_id ? get_post_type( $post_id ) : null,
+		);
+
+		$all = $this->get_all_approved_comments( $post_id );
+		$out['all_count'] = count( $all );
+		$out['all_types'] = array_values( array_unique( array_map( function ( $c ) { return $c->comment_type; }, $all ) ) );
+		$out['all_parents'] = array_map( function ( $c ) { return (int) $c->comment_parent; }, $all );
+
+		$out['root_ids']               = $this->get_root_ids( $post_id );
+		$out['count_comments']         = $this->count_comments( $post_id );
+		$out['per_page']               = $this->per_page( $args );
+		$out['top_level_order']        = $this->top_level_order( $args );
+		$out['cpage']                  = $this->current_cpage();
+		$out['opt_page_comments']      = get_option( 'page_comments' );
+		$out['opt_comments_per_page']  = get_option( 'comments_per_page' );
+		$out['opt_default_comments_page'] = get_option( 'default_comments_page' );
+
+		$comments = $this->query_comments( $post_id, $args );
+		$out['query_comments_count'] = count( $comments );
+		$out['rendered_list_empty']  = ( '' === $this->build_list_html( $comments, $args ) );
+
+		if ( $all ) {
+			$sample        = (array) $all[0];
+			unset( $sample['comment_content'] );
+			$out['sample_comment_fields'] = array_keys( $sample );
+			$out['sample_comment']        = $sample;
+		}
+
+		$html  = '<div style="border:2px solid #c00;background:#fff;color:#111;padding:12px;margin:12px 0;font:12px/1.4 monospace;white-space:pre-wrap;word-break:break-all;">';
+		$html .= '<strong>bwpc_debug</strong> — Berlin WP Comments 运行期探针<br><br>';
+		$html .= esc_html( print_r( $out, true ) );
+		$html .= '</div>';
+
+		return $html;
 	}
 
 	/**
