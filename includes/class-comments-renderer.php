@@ -205,8 +205,17 @@ class Berlin_WP_Comments_Renderer {
 			// ① 分页单位 = 顶层 thread：number+offset 落在 parent=0 上，
 			// 不依赖 comments_template() 建立的 $wp_query->comments 上下文
 			// （陷阱 C / OPEN_ITEMS ③ 方案 A）。
+			// P6 加固：cpage 越界（如缓存陈旧 / rewrite 误解析导致超大页码）时，
+			// 回落到末页而非请求空 offset（否则整页无评论，吻合「comment-page-2
+			// 无评论展示」实机症状）。与 WP 原生评论分页（out-of-range → 末页）一致。
+			$total    = $this->count_top_level_comments( $post_id );
+			$max_pages = max( 1, (int) ceil( $total / $per_page ) );
+			$cpage    = $this->current_cpage();
+			if ( $cpage > $max_pages ) {
+				$cpage = $max_pages;
+			}
 			$top_args['number'] = $per_page;
-			$top_args['offset'] = ( $this->current_cpage() - 1 ) * $per_page;
+			$top_args['offset'] = ( $cpage - 1 ) * $per_page;
 		} else {
 			$top_args['number'] = 0;
 		}

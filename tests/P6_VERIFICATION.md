@@ -102,3 +102,22 @@
 
 - O5 + O8 均通过 → 阶段可达 `V1_WP_VERIFIED`，P6 完成。
 - 通过后更新：`berlin-wp-comments.php` 注记 + `01_PROJECT/STATUS.md` + `00_STATE/CURRENT_STATE.md`（O5/O8 门禁关闭），并据治理流程建 CHK-014（P6 实机验收锚点；CHK-013 已用于 AUDIT-009 Correction 锚点，不再复用）。
+
+---
+
+## P6 实机追加发现（2026-08-30，vosalen.com）：comment-page-2 无评论 + 分页器页码不一致
+
+**现象**：页 1 分页器显示 1,2,3；进入 `comment-page-2` 后分页器仅 1,2，且评论区无评论展示。
+
+**代码层结论（确定性）**：`render_pagination()` 的 `max_pages = ceil( count_top_level_comments($post_id) / $per_page )` 与当前页码无关、对同 post 恒定。故「页 1 显示 3 页、页 2 仅 2 页」的不一致**不可能源自本插件当前代码**，指向以下实机因素之一：
+
+1. **分页 URL 全页缓存陈旧（最可能）**：缓存插件/CDN 缓存了 `…/comment-page-2/` 的早期快照（彼时评论少、页 2 为空），现 DB 评论增多但缓存未刷新。
+2. **线上插件文件版本与仓库不一致**：若 `class-comments-renderer.php` 仍是 AUDIT-008 修正前的旧版（max_pages 由被分页切片的结果推导），则会随页码漂移。
+
+**已落地加固（commit → master，v0.1.7）**：`query_comments()` 以 `count_top_level_comments()` 推导 `max_pages`，将 `cpage` 钳制到 `[1, max_pages]`，越界回落末页（与 WP 原生评论分页一致），彻底消除「越界 cpage → 空 offset → 整页无评论」的失败态。该加固对范围内页码行为无影响。
+
+**实机复核清单（用户执行）**：
+1. 清空站点/CDN 全页缓存，并将 `/product/*/comment-page-*` 排除出缓存（或设为 non-cacheable）。
+2. 确认线上 `class-comments-renderer.php` 与仓库 `30c93a7` 后（含本加固）一致：`query_comments()` 含 `max_pages` 钳制、`render_pagination()` 由 `count_top_level_comments()` 推导。
+3. 清缓存后重测：各 comment-page-N 均显示相同页码集合（如 1,2,3）且均有对应评论；无空页。
+4. WebFetch 复核：`https://www.vosalen.com/product/dark-lion-phone-case/` 当前解析到的产品（实测返回「Adjustable Elbow Foldable Antenna, SKU 4562」而非 phone case）——确认测试所用 slug 仍指向预期产品，避免跨产品评论集混淆。

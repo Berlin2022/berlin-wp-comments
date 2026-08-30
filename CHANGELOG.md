@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.7] — UNRELEASED
+
+> P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。
+
+- **评论分页越界保护（P6 实机发现）**：`query_comments()` 在 `cpage` 越界（缓存陈旧 / rewrite 误解析导致超大页码）时请求空 `offset`，致使 `comment-page-2` 等页「无评论展示」。修正：以 `count_top_level_comments()` 推导 `max_pages`，将 `cpage` 钳制到 `[1, max_pages]`，越界回落末页（与 WP 原生评论分页一致）。本插件分页计数（max_pages 由顶层 thread 总数推导）本身确定性、与页码无关，故「页 1 显示 1,2,3、页 2 仅 1,2」的不一致现象不源自本代码，实机多为分页 URL 的全页缓存陈旧或线上插件文件版本与仓库不一致所致；本提交为防御性加固，消除空列表失败态。
+
 ## [0.1.6] — UNRELEASED
 
 > P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。
