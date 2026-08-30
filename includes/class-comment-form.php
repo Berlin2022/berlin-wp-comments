@@ -4,20 +4,23 @@
  *
  * 职责：输出评论表单，**完全复用 WordPress 原生提交链路**。
  *
- * 关键架构杠杆（CP1 决策 D4 / P3）：
+ * v0.1.12 — 完全自渲染（脱离 comment_form() 内部排序）：
  *
- *   使用核心的 comment_form()，其 action 指向 /wp-comments-post.php：
+ *   提交 action 仍指向 /wp-comments-post.php，由核心处理
+ *   审核/垃圾过滤/Akismet/通知/状态机。HTML 完全由本模块 echo，
+ *   字段顺序固定为：
  *
- *       POST → wp-comments-post.php
- *              → wp_handle_comment_submission()
- *                  → wp_new_comment()
- *                      → 审核 / 垃圾过滤 / Akismet / 通知 / 状态机
+ *     [Author *      ] [Email *       ]    ← .bwpc-form-row 同行
+ *     Attachment: [选择文件]
+ *     [ Your comment *                           ]
+ *     [☑] Save my name, email ...
+ *     [ Post Comment ]
  *
- *   **只要用 comment_form()，插件一行提交代码都不用写**，P3 自动成立。
- *   这是本插件能保持极简的核心原因。
+ *   id="respond" 让核心 comment-reply 脚本能识别并移动表单到被回复评论下方；
+ *   enctype="multipart/form-data" 为将来接管 $_FILES['bwpc_comment_attachment']
+ *   备用（暂不处理后端）。
  *
- *   ⚠️ 不給评论提交自造 nonce——会与核心端点冲突。
- *      nonce 只用于插件自己的写操作（如头像上传）。
+ *   ⚠️ 不给评论提交自造 nonce——与核心端点冲突，nonce 只用于插件自己的写操作。
  *
  * @package Berlin_WP_Comments
  */
@@ -28,13 +31,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Class Berlin_WP_Comments_Form
- *
- * P3 实现：消费骨架 TODO[D3]。
  */
 class Berlin_WP_Comments_Form {
 
 	/**
-	 * 插件主实例（用于模板渲染与依赖）。
+	 * 插件主实例。
 	 *
 	 * @var Berlin_WP_Comments_Plugin
 	 */
@@ -50,12 +51,12 @@ class Berlin_WP_Comments_Form {
 	}
 
 	/**
-	 * 渲染评论表单。
+	 * 渲染评论表单（v0.1.12 完全自渲染版本）。
 	 *
-	 * 不写任何提交逻辑：直接调用核心 comment_form()，由 WP 负责
-	 * 审核/垃圾/通知/状态机。评论关闭时降级为管理员提示（陷阱 D）。
+	 * 不写任何提交逻辑：表单 action 仍指向核心 /wp-comments-post.php，
+	 * 审核/垃圾/通知由核心在提交端处理。
 	 *
-	 * @param array $args 已规范化的 shortcode 参数（P4 传入；P3 可空）。
+	 * @param array $args 已规范化的 shortcode 参数（P4 传入；保留兼容）。
 	 * @return string 表单 HTML。
 	 */
 	public function render( array $args = array() ) {
@@ -67,82 +68,111 @@ class Berlin_WP_Comments_Form {
 		// O4：线程回复复用核心 comment-reply 脚本（不写自有线程逻辑）。
 		$this->enqueue_reply_script();
 
-		$form_args = $this->get_form_args( $args );
-
-		// v0.1.12：预备文件上传 —— 仅本次表单渲染期间为 <form> 注入
-		// enctype="multipart/form-data"，使将来接管 $_FILES['bwpc_comment_attachment']
-		// 时文件可被提交（不污染站点原生评论表单）。
-		$enctype_cb = function () {
-			echo ' enctype="multipart/form-data"';
-		};
-		add_filter( 'comment_form_tag', $enctype_cb );
-
-		// comment_form() 直接 echo，故 ob 捕获为字符串交由 shortcode 装配（P4）。
-		ob_start();
-		comment_form( $form_args );
-		$form_html = (string) ob_get_clean();
-
-		remove_filter( 'comment_form_tag', $enctype_cb );
+		$form_html = $this->render_form_html();
 
 		// 经模板输出（支持主题覆盖，P9）；模板只包裹、不自造 <form>。
 		return $this->plugin->render_template(
 			'form',
 			array(
-				'args'      => $form_args,
+				'args'      => $args,
 				'form_html' => $form_html,
 			)
 		);
 	}
 
 	/**
-	 * 组装 comment_form() 参数。
+	 * 组装完整表单 HTML（v0.1.12 自渲染）。
 	 *
-	 * 定制走**作用域内的参数**，不自造表单、不自造 nonce。
-	 * V1 字段（姓名+邮箱+评论内容）直接复用核心默认字段，无需改过滤器，
-	 * 故此处仅设置标题/容器 class/提交按钮文案，避免注册全站过滤器污染
-	 * 主题原生评论表单（P9：插件不接管主题）。如需更深定制，可在此基础上
-	 * 通过 comment_form_defaults / comment_form_fields 过滤器扩展。
+	 * 字段顺序固定：
+	 *   1) Name + Email（同行，flex .bwpc-form-row）
+	 *   2) Attachment（文件上传预留）
+	 *   3) Comment（textarea，带 placeholder "Your comment *"）
+	 *   4) cookies-consent（保留核心字段名 wp-comment-cookies-consent）
+	 *   5) submit + post id + parent id（隐藏）
+	 *
+	 * 占位符即标签（USER 视觉要求"文字放到 input 框里"），原 <label> 由 CSS sr-only。
+	 *
+	 * @return string
+	 */
+	protected function render_form_html() {
+		$commenter = wp_get_current_commenter();
+		$post_id   = (int) get_the_ID();
+		$req       = (string) get_option( 'require_name_email' );
+
+		$required_attr = ( '1' === $req || 1 === $req || true === $req ) ? ' required="required"' : '';
+
+		ob_start();
+		?>
+<form action="<?php echo esc_url( site_url( '/wp-comments-post.php' ) ); ?>" method="post" id="respond" class="bwpc-comment-form" enctype="multipart/form-data">
+	<h3 id="reply-title" class="bwpc-comment-reply-title"><?php esc_html_e( 'Leave a Comment', 'berlin-wp-comments' ); ?></h3>
+
+	<?php // 1) Name + Email — 同行（v0.1.12 视觉要求） ?>
+	<div class="bwpc-form-row">
+		<p class="comment-form-author">
+			<label for="author"><?php esc_html_e( 'Name', 'berlin-wp-comments' ); ?> <span class="required">*</span></label>
+			<input id="author" name="author" type="text" placeholder="<?php echo esc_attr__( 'Name *', 'berlin-wp-comments' ); ?>" value="<?php echo esc_attr( $commenter['comment_author'] ); ?>" size="30" maxlength="245" autocomplete="name"<?php echo $required_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> />
+		</p>
+		<p class="comment-form-email">
+			<label for="email"><?php esc_html_e( 'Email', 'berlin-wp-comments' ); ?> <span class="required">*</span></label>
+			<input id="email" name="email" type="email" placeholder="<?php echo esc_attr__( 'Email *', 'berlin-wp-comments' ); ?>" value="<?php echo esc_attr( $commenter['comment_author_email'] ); ?>" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email"<?php echo $required_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> />
+		</p>
+	</div>
+
+	<?php // 2) Attachment — 文件上传预留（前/后端都可继续接；当前仅 UI） ?>
+	<p class="comment-form-attachment">
+		<label for="bwpc-comment-attachment"><?php esc_html_e( 'Attachment', 'berlin-wp-comments' ); ?></label>
+		<input id="bwpc-comment-attachment" name="bwpc_comment_attachment" type="file" accept="image/*,.pdf" />
+	</p>
+
+	<?php // 3) Comment textarea — placeholder="Your comment *"（占位符即标签） ?>
+	<p class="comment-form-comment">
+		<label for="comment"><?php echo esc_html_x( 'Comment', 'noun', 'berlin-wp-comments' ); ?></label>
+		<textarea id="comment" name="comment" placeholder="<?php echo esc_attr__( 'Your comment *', 'berlin-wp-comments' ); ?>" cols="45" rows="8" maxlength="65525" required="required" aria-required="true"></textarea>
+	</p>
+
+	<?php // 4) cookies-consent — 保留核心字段名 wp-comment-cookies-consent ?>
+	<p class="comment-form-cookies-consent">
+		<input id="wp-comment-cookies-consent" name="wp-comment-cookies-consent" type="checkbox" value="yes" />
+		<label for="wp-comment-cookies-consent"><?php esc_html_e( 'Save my name, email, and website in this browser for the next time I comment.', 'berlin-wp-comments' ); ?></label>
+	</p>
+
+	<?php // 5) submit + 隐藏字段（comment_post_ID / comment_parent） ?>
+	<p class="form-submit">
+		<button type="submit" name="submit" id="submit" class="submit" value="<?php echo esc_attr__( 'Post Comment', 'berlin-wp-comments' ); ?>"><?php esc_html_e( 'Post Comment', 'berlin-wp-comments' ); ?></button>
+		<input type="hidden" name="comment_post_ID" value="<?php echo (int) $post_id; ?>" id="comment_post_ID" />
+		<input type="hidden" name="comment_parent" id="comment_parent" value="0" />
+	</p>
+
+	<?php
+	// 第三方插件 hook 点（保留扩展位：comment-reply 行为 / 反垃圾令牌 / 自定义逻辑可挂靠）
+	/**
+	 * Fires at the end of the comment form, after all fields are rendered.
+	 *
+	 * @since 2.7.0
+	 * @param int $post_id The post ID.
+	 */
+	do_action( 'comment_form', $post_id );
+	?>
+</form>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * 保留供模板兼容的旧入口（旧模板仍可读 $args → 无副作用）。
+	 *
+	 * 不再被 render() 调用；保留仅为不让任何外部测试脚本意外 fatal。
 	 *
 	 * @param array $args 已规范化的 shortcode 参数。
 	 * @return array
 	 */
-	protected function get_form_args( array $args = array() ) {
-		$commenter = wp_get_current_commenter();
-
-		$form_args = array(
+	protected function get_form_args( array $args = array() ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+		return array(
 			'title_reply'         => __( 'Leave a Comment', 'berlin-wp-comments' ),
-			'title_reply_before'  => '<h3 id="reply-title" class="bwpc-comment-reply-title">',
-			'title_reply_after'   => '</h3>',
 			'label_submit'        => __( 'Post Comment', 'berlin-wp-comments' ),
-			'cancel_reply_link'   => __( 'Cancel reply', 'berlin-wp-comments' ),
 			'class_form'          => 'bwpc-comment-form',
 			'id_form'             => 'bwpc-commentform',
-			'cancel_reply_before' => ' <span class="bwpc-cancel-reply">',
-			'cancel_reply_after'  => '</span>',
-			// 接管字段标签，强制英文（否则 zh_CN 站点下核心翻成"名/电子邮件/网站"）。
-			// v0.1.12：给 input 加 placeholder 作视觉标签（"文字放到 label 内"），
-			// 原 <label> 仍渲染但由 CSS sr-only 隐藏以保 a11y。占位符色 #b3b3b3。
-		// v0.1.12 表单布局（用户需求）：
-		//  - Name + Email 同一行（flex 行 .bwpc-form-row）；占位符即标签，原 <label> 视觉隐藏保 a11y。
-		//  - Website(url) 字段移除。
-		//  - 预留 Attachment 文件上传字段（先不接管后端；表单已加 multipart 以备）。
-		'fields'              => array(
-			'author' => '<div class="bwpc-form-row">'
-				. '<p class="comment-form-author"><label for="author">' . __( 'Name', 'berlin-wp-comments' ) . ' <span class="required">*</span></label>'
-				. '<input id="author" name="author" type="text" placeholder="' . esc_attr__( 'Name *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>'
-				. '<p class="comment-form-email"><label for="email">' . __( 'Email', 'berlin-wp-comments' ) . ' <span class="required">*</span></label>'
-				. '<input id="email" name="email" type="text" placeholder="' . esc_attr__( 'Email *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>'
-				. '</div>',
-			'attachment' => '<p class="comment-form-attachment"><label for="bwpc-comment-attachment">' . __( 'Attachment', 'berlin-wp-comments' ) . '</label>'
-				. '<input id="bwpc-comment-attachment" name="bwpc_comment_attachment" type="file" accept="image/*,.pdf" /></p>',
-		),
-			// 接管评论正文：加 placeholder "Your comment *"，使标签视觉放进输入框。
-			'comment_field'       => '<p class="comment-form-comment"><label for="comment">' . _x( 'Comment', 'noun', 'berlin-wp-comments' ) . '</label> ' .
-			                          '<textarea id="comment" name="comment" placeholder="' . esc_attr__( 'Your comment *', 'berlin-wp-comments' ) . '" cols="45" rows="8" maxlength="65525" required="required" aria-required="true"></textarea></p>',
 		);
-
-
-		return $form_args;
 	}
 
 	/**
@@ -175,8 +205,7 @@ class Berlin_WP_Comments_Form {
 	 * 脚本不入队 → 点击 Reply 退化为整页导航（?replytocom=N#respond）而非
 	 * 原生内联回复。改为无条件入队（仅当评论区开放时由 render() 调用到此）。
 	 *
-	 * 配合 templates/comment.php 的 respond_id='respond'（与 comment_form()
-	 * 实际包裹层 id 一致），实现零自有 JS 的内联回复（CP1 约束 C5）。
+	 * 自渲染表单 id="respond" 与核心 comment-reply.js 期望一致，脚本正常工作。
 	 *
 	 * @return void
 	 */
