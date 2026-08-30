@@ -7,6 +7,7 @@
 > 内置 B2B 视觉主题（SI-001 成果并入核心，撤销原「站点层 override」红线）。
 
 - **内置评论区视觉主题 `berlin-wp-comments-vosalen.css`**：将原 SI-001「站点层 override」成果转为插件内置默认样式（设计基线参考 Made-in-China / Alibaba 主流 B2B 评论板块：圆形头像、5 星、国家/Verified/Repeat buyer 元数据、产品订单条、Helpful）。`enqueue_assets()` 在加载 `comments.css` 后自动加载本主题（依赖 `bwpc-comments`，保证输出顺序）。站点层仍可用主题 Additional CSS 覆盖 `.bwpc*` 命名空间，不锁定视觉。品牌色等以 `:root` CSS 变量抽离，便于站点定制。
+- **评论表单完全自渲染**（结构性变更，脱离 `comment_form()` 内部排序）：P6 + SI-001 实机发现——作者先看到的"Wp 核心 `comment_form()` 在不同 WP 版本下输出顺序不可控"问题，在不同 WP 版本下 cookies-consent 与 textarea / email / url 之间顺序漂移。改为 `render_form_html()` 直接 echo `<form id="respond">`，字段顺序固定为 ① Name+Email 同行（`.bwpc-form-row` flex）→ ② Attachment → ③ Comment textarea → ④ cookies-consent → ⑤ submit + post id + parent id。提交 action 仍指向核心 `/wp-comments-post.php`，审核/垃圾/Akismet/通知由核心在提交端处理；`id="respond"` 保证核心 `comment-reply.js` 仍能识别并移动表单。占位符即标签（`Name *` / `Email *` / `Your comment *`）+ `enctype="multipart/form-data"` 为将来 `$_FILES['bwpc_comment_attachment']` 上传处理预留。
 
 ## [0.1.11] — 2026-08-30 (V1 首发)
 
