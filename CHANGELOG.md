@@ -2,9 +2,9 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.11] — UNRELEASED
+## [0.1.11] — 2026-08-30 (V1 首发)
 
-> P6 实机根因修复（2026-08-30，vosalen.com 真实 WP，探针数据驱动定位）。
+> P6 实机根因修复（2026-08-30，vosalen.com 真实 WP，探针数据驱动定位）。本版本对应 V1_WP_VERIFIED 实机验收通过，作为首个正式发布 tag `v0.1.11`。
 
 - **空分页根因修复（P6 实机发现五，决定性）**：`?bwpc_debug=1` 探针（v0.1.10）实机数据暴露——`query_comments_count=3` 但第 2/3 页内容为空。根因：`build_list_html()` 把已按顶层 thread 切好的本页评论交给 `wp_list_comments()` 时**未关闭 WP 自身的分页切片**；站点开启 `page_comments`（`comments_per_page=3`）时，`wp_list_comments()` 用 `get_query_var('cpage')` 对传入数组**二次切片**——第 1 页 `array_slice(0,3)` 正常，第 2 页 `array_slice(3,3)`、第 3 页同理**切空**（精确吻合「页码一致但 2/3 页为空」实机症状）。修正：在 `wp_list_comments` 参数中显式 `per_page => 0` + `page => 0`，禁止 WP 重复切片，仅让其按 `comment_parent` 重建嵌套。
 - **探针升级（v0.1.10 → 延续）**：`?bwpc_debug=1` 不再短路，红面板下方照常渲染真实评论区，直接肉眼确认内容；新增 `list_html_len` / `rendered_list_empty`（`YES`/`no` 显式）/ `list_html_snippet`（前 200 字纯文本），消除 `print_r` 把 `false`/`''` 都显示为空造成的误判。`rendered_list_empty` 字段语义由布尔改为可读字符串。
