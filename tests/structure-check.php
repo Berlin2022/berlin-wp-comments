@@ -57,13 +57,16 @@ $required_files = array(
 	'berlin-wp-comments.php',
 	'includes/class-plugin.php',
 	'includes/class-avatar.php',
+	'includes/class-bwpc-attachment.php',         // v0.1.13: 评论附件
 	'includes/class-comments-renderer.php',
 	'includes/class-comment-form.php',
 	'includes/class-comments-shortcode.php',
 	'templates/comments.php',
 	'templates/comment.php',
+	'templates/comments-pager.php',              // P5: 分页模板（已存在此前漏检）
 	'templates/form.php',
 	'assets/css/comments.css',
+	'assets/css/berlin-wp-comments-vosalen.css',  // v0.1.12: 内置 B2B 视觉主题（已存在此前漏检）
 	'assets/js/comments.js',
 	'README.md',
 	'CHANGELOG.md',
@@ -143,6 +146,7 @@ $report = array();
 $expected_classes = array(
 	'includes/class-plugin.php'             => 'Berlin_WP_Comments_Plugin',
 	'includes/class-avatar.php'             => 'Berlin_WP_Comments_Avatar',
+	'includes/class-bwpc-attachment.php'    => 'Bwpc_Comment_Attachment',     // v0.1.13
 	'includes/class-comments-renderer.php'  => 'Berlin_WP_Comments_Renderer',
 	'includes/class-comment-form.php'       => 'Berlin_WP_Comments_Form',
 	'includes/class-comments-shortcode.php' => 'Berlin_WP_Comments_Shortcode',
@@ -354,19 +358,36 @@ bwpc_check(
     'render_comment() 未 echo render_template(comment) 返回值，Walker 捕获为空'
 );
 
-// P3 起：评论表单必须复用核心 comment_form 提交链路（不自造 <form>/nonce）。
+// v0.1.12 结构性变更：表单已自渲染（脱离 comment_form() 内部排序漂移）。
+// 原 P3 契约（"调用 comment_form" + "不自造 <form>"）已不适用，按新契约重写：
+//   - 不再调用核心 comment_form()（避免不同 WP 版本下 cookies-consent / textarea / url
+//     顺序漂移，实机观测）；
+//   - action 仍指向 /wp-comments-post.php，id="respond" 保核心 comment-reply.js 集成；
+//   - 保留 do_action('comment_form', $post_id) 让第三方扩展仍能挂接；
+//   - 不自造 nonce（与核心端点冲突，nonce 由核心 wp-comments-post.php 校验）。
 $form_src = is_file( $root . '/includes/class-comment-form.php' )
 	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-comment-form.php' ) )
 	: '';
 bwpc_check(
-	false !== strpos( $form_src, 'comment_form' ),
-	'评论表单复用核心提交链路（P3：comment_form，不自造表单/nonce）',
-	'未找到 comment_form 调用'
+	false === strpos( $form_src, 'comment_form(' ),
+	'评论表单不再调用核心 comment_form()（v0.1.12+ 自渲染：脱离 WP 内部排序漂移）',
+	'class-comment-form.php 仍调用 comment_form()，需改为自渲染'
 );
 bwpc_check(
-	false === strpos( $form_src, '<form' ) && false === strpos( $form_src, 'action=' ),
-	'评论表单不自造提交表单（P3：无裸 <form>/action，复用核心端点）',
-	'发现自造 <form>/action，偏离核心提交链路'
+	false !== strpos( $form_src, '/wp-comments-post.php' )
+		&& false !== strpos( $form_src, 'id="respond"' ),
+	'评论表单仍复用核心端点（v0.1.12+：action=/wp-comments-post.php + id=respond 兼容 comment-reply.js）',
+	'class-comment-form.php 未指向核心 wp-comments-post.php 或未设 id="respond"'
+);
+bwpc_check(
+	false !== strpos( $form_src, "do_action( 'comment_form'" ),
+	'评论表单保留 comment_form hook 点（v0.1.12+：do_action(\'comment_form\', $post_id) 让第三方扩展仍可用）',
+	'class-comment-form.php 缺少 do_action(comment_form) 钩子（破坏了扩展位）'
+);
+bwpc_check(
+	false === strpos( $form_src, 'wp_create_nonce' ) && false === strpos( $form_src, 'wp_nonce_field' ),
+	'评论表单不自造 nonce（v0.1.12+：核心 wp-comments-post.php 端校验 nonce，不双写）',
+	'class-comment-form.php 出现自造 nonce（与核心端点冲突）'
 );
 bwpc_check(
 	false !== strpos( $form_src, 'current_user_can' ),
@@ -537,6 +558,43 @@ bwpc_check(
 	false !== strpos( $renderer_src, 'count_top_level_comments' ),
 	'分页分母=顶层 thread 数（AUDIT-008①：count_top_level_comments）',
 	'render_pagination 未以顶层评论数推导 max_pages'
+);
+
+// v0.1.13: 评论附件模块契约。
+$attachment_src = is_file( $root . '/includes/class-bwpc-attachment.php' )
+	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-bwpc-attachment.php' ) )
+	: '';
+bwpc_check(
+	false !== strpos( $attachment_src, "add_action( 'comment_post'" )
+		&& false !== strpos( $attachment_src, "'deleted_comment'" )
+		&& false !== strpos( $attachment_src, "'trash_comment'" )
+		&& false !== strpos( $attachment_src, "'spam_comment'" ),
+	'attachment 模块注册 4 个生命周期钩子（v0.1.13：comment_post + deleted/trash/spam_comment）',
+	'class-bwpc-attachment.php 缺少一个或多个钩子注册'
+);
+bwpc_check(
+	false !== strpos( $plugin_src, 'new Bwpc_Comment_Attachment' )
+		&& false !== strpos( $plugin_src, 'attachment->register' ),
+	'attachment 模块已装配（v0.1.13：plugin boot() 实例化 + register）',
+	'class-plugin.php 未实例化 / 未注册 attachment 模块'
+);
+// 模板必须调用 render_media + 触发 .bwpc-comment__media CSS 容器（否则 CSS 段落 6 永不入场）。
+bwpc_check(
+	false !== strpos( $comment_tpl, 'Bwpc_Comment_Attachment::render_media' )
+		&& false !== strpos( $comment_tpl, 'bwpc-comment__media' ),
+	'attachment 模板输出契约（v0.1.13：comment.php 调用 render_media + 输出 .bwpc-comment__media）',
+	'comment.php 未调用 render_media 或未输出 .bwpc-comment__media 容器'
+);
+
+// v0.1.13: 评论分页视觉契约（非当前页必须有清晰可见的默认边框，不是 --vosalen-border）。
+$vosalen_css = is_file( $root . '/assets/css/berlin-wp-comments-vosalen.css' )
+	? file_get_contents( $root . '/assets/css/berlin-wp-comments-vosalen.css' )
+	: '';
+bwpc_check(
+	false !== strpos( $vosalen_css, '.bwpc-pager__link' )
+		&& false !== strpos( $vosalen_css, '#D1D5DB' ),
+	'分页非当前页可见性契约（v0.1.13：.bwpc-pager__link 使用 #D1D5DB 高对比度边框）',
+	'berlin-wp-comments-vosalen.css 缺少清晰的非当前页边框色（默认 #E5E7EB 对比度过弱）'
 );
 
 /* -------------------------------------------------------------------------

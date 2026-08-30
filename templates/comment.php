@@ -53,6 +53,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 			<div class="bwpc-comment__content"><?php comment_text(); // WP 核心转义 + KSES ?></div>
 
+			<?php
+			// v0.1.13: 评论附件渲染（存在则输出 .bwpc-comment__media 容器，
+			// 由模板 echo 已转义 HTML；render_media 内部已处理 attachment
+			// 不存在 / 无权限等静默场景）。
+			$bwpc_media_html = Bwpc_Comment_Attachment::render_media( (int) $comment->comment_ID );
+			if ( '' !== $bwpc_media_html ) :
+				?>
+				<div class="bwpc-comment__media"><?php echo $bwpc_media_html; // 助手内部已 esc_html / esc_url 转义 ?></div>
+				<?php
+			endif;
+			?>
+
 			<footer class="bwpc-comment__actions">
 				<?php
 			// 回复链接：respond_id 必须与 comment_form() 实际输出的包裹层 id 一致。

@@ -41,6 +41,13 @@ final class Berlin_WP_Comments_Plugin {
 	public $renderer;
 
 	/**
+	 * 评论附件模块（v0.1.13+）。
+	 *
+	 * @var Bwpc_Comment_Attachment|null
+	 */
+	public $attachment;
+
+	/**
 	 * 评论表单模块。
 	 *
 	 * @var Berlin_WP_Comments_Form
@@ -78,13 +85,15 @@ final class Berlin_WP_Comments_Plugin {
 	 * @return void
 	 */
 	private function boot() {
-		$this->avatar    = new Berlin_WP_Comments_Avatar();
-		$this->renderer  = new Berlin_WP_Comments_Renderer( $this );
-		$this->form      = new Berlin_WP_Comments_Form( $this );
-		$this->shortcode = new Berlin_WP_Comments_Shortcode( $this->renderer, $this->form );
+		$this->avatar     = new Berlin_WP_Comments_Avatar();
+		$this->attachment = new Bwpc_Comment_Attachment();
+		$this->renderer   = new Berlin_WP_Comments_Renderer( $this );
+		$this->form       = new Berlin_WP_Comments_Form( $this );
+		$this->shortcode  = new Berlin_WP_Comments_Shortcode( $this->renderer, $this->form );
 
 		// 各模块自行注册钩子。
 		$this->avatar->register();
+		$this->attachment->register();
 		$this->shortcode->register();
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );

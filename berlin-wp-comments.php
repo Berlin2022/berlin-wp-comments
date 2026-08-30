@@ -73,6 +73,7 @@ define( 'BWPC_SHORTCODE_ALIAS', 'wp_comments' );
  */
 require_once BWPC_PLUGIN_DIR . 'includes/class-plugin.php';
 require_once BWPC_PLUGIN_DIR . 'includes/class-avatar.php';
+require_once BWPC_PLUGIN_DIR . 'includes/class-bwpc-attachment.php';
 require_once BWPC_PLUGIN_DIR . 'includes/class-comments-renderer.php';
 require_once BWPC_PLUGIN_DIR . 'includes/class-comment-form.php';
 require_once BWPC_PLUGIN_DIR . 'includes/class-comments-shortcode.php';
