@@ -189,19 +189,19 @@ class Berlin_WP_Comments_Avatar {
 
 		wp_nonce_field( 'bwpc_avatar_' . $user->ID, 'bwpc_avatar_nonce' );
 		?>
-		<h2><?php esc_html_e( 'Berlin WP Comments 头像', 'berlin-wp-comments' ); ?></h2>
+		<h2><?php esc_html_e( 'Berlin WP Comments Avatar', 'berlin-wp-comments' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th><label for="bwpc_avatar_file"><?php esc_html_e( '本地头像', 'berlin-wp-comments' ); ?></label></th>
+				<th><label for="bwpc_avatar_file"><?php esc_html_e( 'Local Avatar', 'berlin-wp-comments' ); ?></label></th>
 				<td>
 					<?php if ( $attachment_id ) : ?>
 						<?php echo wp_kses_post( wp_get_attachment_image( $attachment_id, 'thumbnail' ) ); ?><br />
 					<?php endif; ?>
 					<input type="file" name="bwpc_avatar_file" id="bwpc_avatar_file" accept="image/jpeg,image/png,image/gif,image/webp" />
 					<?php if ( $attachment_id ) : ?>
-						<br /><label><input type="checkbox" name="bwpc_avatar_remove" value="1" /> <?php esc_html_e( '移除当前头像', 'berlin-wp-comments' ); ?></label>
+						<br /><label><input type="checkbox" name="bwpc_avatar_remove" value="1" /> <?php esc_html_e( 'Remove current avatar', 'berlin-wp-comments' ); ?></label>
 					<?php endif; ?>
-					<p class="description"><?php esc_html_e( '上传 JPG/PNG/GIF/WebP 作为评论头像。V1 仅支持注册用户；访客头像上传后续开放。', 'berlin-wp-comments' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Upload a JPG/PNG/GIF/WebP image as your comment avatar. V1 supports registered users only; guest uploads coming later.', 'berlin-wp-comments' ); ?></p>
 				</td>
 			</tr>
 		</table>

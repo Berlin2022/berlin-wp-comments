@@ -30,7 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		echo esc_html(
 			sprintf(
 				/* translators: %d = 评论数 */
-				_n( '%d 条评论', '%d 条评论', $count, 'berlin-wp-comments' ),
+				_n( '%d Comment', '%d Comments', $count, 'berlin-wp-comments' ),
 				$count
 			)
 		);
@@ -43,11 +43,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 		echo $list;
 		?>
 	<?php else : ?>
-		<p class="bwpc__empty"><?php echo esc_html__( '暂无评论。', 'berlin-wp-comments' ); ?></p>
+		<p class="bwpc__empty"><?php echo esc_html__( 'No comments yet.', 'berlin-wp-comments' ); ?></p>
 	<?php endif; ?>
 
 	<?php if ( $pager ) : ?>
-		<nav class="bwpc__pager" aria-label="<?php esc_attr_e( '评论分页', 'berlin-wp-comments' ); ?>">
+		<nav class="bwpc__pager" aria-label="<?php esc_attr_e( 'Comments pagination', 'berlin-wp-comments' ); ?>">
 			<?php echo $pager; ?>
 		</nav>
 	<?php endif; ?>

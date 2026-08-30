@@ -61,7 +61,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					array(
 						'add_below'  => 'div-comment',
 						'respond_id' => 'bwpc-respond',
-						'reply_text' => esc_html__( '回复', 'berlin-wp-comments' ),
+						'reply_text' => esc_html__( 'Reply', 'berlin-wp-comments' ),
 						'depth'      => $depth,
 						'max_depth'  => isset( $args['max_depth'] ) ? (int) $args['max_depth'] : 0,
 					),

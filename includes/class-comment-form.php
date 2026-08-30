@@ -97,16 +97,29 @@ class Berlin_WP_Comments_Form {
 	 * @return array
 	 */
 	protected function get_form_args( array $args = array() ) {
+		$commenter = wp_get_current_commenter();
+
 		$form_args = array(
-			'title_reply'         => __( '发表评论', 'berlin-wp-comments' ),
+			'title_reply'         => __( 'Leave a Comment', 'berlin-wp-comments' ),
 			'title_reply_before'  => '<h3 id="bwpc-reply-title" class="bwpc-comment-reply-title">',
 			'title_reply_after'   => '</h3>',
-			'label_submit'        => __( '发表评论', 'berlin-wp-comments' ),
+			'label_submit'        => __( 'Post Comment', 'berlin-wp-comments' ),
+			'cancel_reply_link'   => __( 'Cancel reply', 'berlin-wp-comments' ),
 			'class_form'          => 'bwpc-comment-form',
 			'id_form'             => 'bwpc-commentform',
 			'cancel_reply_before' => ' <span class="bwpc-cancel-reply">',
 			'cancel_reply_after'  => '</span>',
+			// 接管字段标签，强制英文（否则 zh_CN 站点下核心翻成"名/电子邮件/网站"）。
+			'fields'              => array(
+				'author' => '<p class="comment-form-author"><label for="author">' . __( 'Name', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
+				            '<input id="author" name="author" type="text" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>',
+				'email'  => '<p class="comment-form-email"><label for="email">' . __( 'Email', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
+				            '<input id="email" name="email" type="text" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>',
+				'url'    => '<p class="comment-form-url"><label for="url">' . __( 'Website', 'berlin-wp-comments' ) . '</label> ' .
+				            '<input id="url" name="url" type="text" value="' . esc_attr( $commenter['comment_author_url'] ) . '" size="30" maxlength="200" /></p>',
+			),
 		);
+
 
 		return $form_args;
 	}
@@ -125,7 +138,7 @@ class Berlin_WP_Comments_Form {
 			return '';
 		}
 
-		$message = __( '评论已关闭。如需在此页启用评论，请在后台该页面的「讨论」面板勾选「允许评论」。', 'berlin-wp-comments' );
+		$message = __( 'Comments are closed. To enable comments on this page, check "Allow comments" in the Discussion panel of this page\'s editor.', 'berlin-wp-comments' );
 
 		return '<p class="bwpc-notice bwpc-notice--closed">' . esc_html( $message ) . '</p>';
 	}

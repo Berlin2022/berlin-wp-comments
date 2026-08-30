@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
- * Description:       极简 WordPress 原生评论增强插件 —— Shortcode + 本地头像 + 原生评论。WordPress 负责数据与生命周期，本插件只负责呈现与头像。
+ * Description:       Minimal WordPress native comments enhancer — Shortcode + local avatars + native comments. WordPress owns the data and lifecycle; this plugin only handles presentation and avatars.
  * Version:           0.1.5
  * Requires at least: 6.0
  * Requires PHP:      7.4
