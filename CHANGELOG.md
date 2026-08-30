@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.9] — UNRELEASED
+
+> P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。
+
+- **「有计数却无内容」根因修复（P6 实机发现四）**：产品页显示「9 Comments」但列表恒为「No comments yet.」、且分页器出现 1,2,3 空页。根因：列表查询 `query_comments()` 以 `parent => 0` 只取顶层评论，而该产品的 9 条评论**全部为「孤儿回复」**（comment_parent 指向缺失 / 非本产品评论），被 `parent=0` 过滤后列表恒空；标题计数 `count_comments()` 不计 parent 故照常显示 9。修正：重写分页模型——一次性取回本产品全部已批准评论（请求内缓存），以「根评论」= `parent=0` **或** `parent` 不在本产品已批准评论集内的孤儿回复作为分页与展示单位；本页 = 根评论按日期方向切片（`array_slice`）+ 其完整后代（由已取回全集按 `children_map` 递归收集，无额外 DB 查询）；`count_top_level_comments()` 与 `query_comments()` 共用 `get_root_ids()`，计数/列表口径彻底一致，幽灵分页与空列表同时消除。`structure-check` 静态回归守卫同步更新为根评论分页契约（90/90 通过）。**注意**：本改法依赖「评论数据真实存在但 parent 指向缺失」的实机假设；若 vosalen.com 评论确为顶层（parent=0）评论，本版本同样正确展示，无需额外操作。
+
 ## [0.1.8] — UNRELEASED
 
 > P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。

@@ -34,6 +34,20 @@ class Berlin_WP_Comments_Renderer {
 	private $plugin;
 
 	/**
+	 * 请求内评论全集缓存（post_id => WP_Comment[]），避免重复 get_comments。
+	 *
+	 * @var array
+	 */
+	private $all_comments_cache = array();
+
+	/**
+	 * 请求内根评论 ID 缓存（post_id => int[]）。
+	 *
+	 * @var array
+	 */
+	private $root_ids_cache = array();
+
+	/**
 	 * 构造。
 	 *
 	 * @param Berlin_WP_Comments_Plugin $plugin 插件主实例。
@@ -174,59 +188,80 @@ class Berlin_WP_Comments_Renderer {
 	}
 
 	/**
-	 * 取本页应显示的评论（WP_Comment_Query）。
+	 * 取本页应显示的评论。
 	 *
-	 * AUDIT-008 REQUIRED CORRECTION（P5 局部修正）：
-	 *   ① 分页单位 = 顶层评论（thread）。offset 落在「parent=0」的顶层评论上，
-	 *      而非平面 comment 行；再用 collect_thread_descendants() 补齐每个顶层
-	 *      thread 的完整后代子树，使 wp_list_comments() 依 comment_parent 重建线程时
-	 *      父节点不缺失。WP_Comment_Query 默认 hierarchical=false，不会自动补全后代，
-	 *      故原「平面 offset 切片」会把一条 thread 从父节点切到下一页。
-	 *   ② 实际消费 page_comments（分页总开关）与 default_comments_page（顶层排序方向），
-	 *      不再仅在注释中声称「尊重」。
+	 * P6 修正（实机：产品 9 条评论全部为「孤儿回复」——comment_parent 指向缺失 /
+	 * 非本产品评论，被旧版 parent=0 过滤后列表恒空，致「有计数却无内容」）：
+	 *
+	 *   ① 一次性取回本产品全部已批准评论（含回复），在 PHP 层判定「根评论」——
+	 *      parent=0，或 parent 指向不存在 / 非本产品已批准评论的孤儿回复。
+	 *      根评论既作为分页单位，也能让孤儿回复正常展示（不再被 parent=0 过滤吞掉）。
+	 *   ② 本页 = 根评论按日期方向切片（顶层 thread 顺序）+ 其完整后代，
+	 *      从已取回的全集内筛选（无额外 DB 查询），wp_list_comments 依 comment_parent 重建嵌套。
+	 *   ③ 实际消费 page_comments（分页总开关）与 default_comments_page（顶层排序方向）。
+	 *   ④ cpage 越界（缓存陈旧 / rewrite 误解析）回落末页，与 WP 原生一致。
 	 *
 	 * @param int   $post_id 目标对象 ID。
 	 * @param array $args    参数。
 	 * @return WP_Comment[]
 	 */
 	protected function query_comments( $post_id, array $args ) {
-		$per_page = $this->per_page( $args );
-		$order    = $this->top_level_order( $args );
-
-		// 与 count_top_level_comments() 共用同一组筛选 base（parent=0 / status=approve /
-		// type=comment），杜绝计数与列表查询口径分叉 → 不会产生幽灵分页页（P6 实机：
-		// 旧版 count 漏 parent=0 限制，把回复也计入，致 max_pages 虚高、后续页空）。
-		$top_args = $this->top_level_base_args( $post_id );
-		$top_args['order'] = $order;
-
-		if ( $per_page > 0 ) {
-			// ① 分页单位 = 顶层 thread：number+offset 落在 parent=0 上，
-			// 不依赖 comments_template() 建立的 $wp_query->comments 上下文
-			// （陷阱 C / OPEN_ITEMS ③ 方案 A）。
-			// P6 加固：cpage 越界（如缓存陈旧 / rewrite 误解析导致超大页码）时，
-			// 回落到末页而非请求空 offset（否则整页无评论，吻合「comment-page-2
-			// 无评论展示」实机症状）。与 WP 原生评论分页（out-of-range → 末页）一致。
-			$total    = $this->count_top_level_comments( $post_id );
-			$max_pages = max( 1, (int) ceil( $total / $per_page ) );
-			$cpage    = $this->current_cpage();
-			if ( $cpage > $max_pages ) {
-				$cpage = $max_pages;
-			}
-			$top_args['number'] = $per_page;
-			$top_args['offset'] = ( $cpage - 1 ) * $per_page;
-		} else {
-			$top_args['number'] = 0;
-		}
-
-		$top = get_comments( $top_args );
-		if ( empty( $top ) || ! is_array( $top ) ) {
+		$all = $this->get_all_approved_comments( $post_id );
+		if ( empty( $all ) ) {
 			return array();
 		}
 
-		// ① 补齐每个顶层 thread 的完整后代，确保 wp_list_comments 建树不缺父。
-		$descendants = $this->collect_thread_descendants( wp_list_pluck( $top, 'comment_ID' ), $post_id );
+		$root_ids = $this->get_root_ids( $post_id );
+		if ( empty( $root_ids ) ) {
+			return array();
+		}
 
-		return array_merge( $top, $descendants );
+		// 根评论按日期方向排序（顶层 thread 顺序：newest=DESC / oldest=ASC）。
+		$order = $this->top_level_order( $args );
+		$all_by_id = array();
+		foreach ( $all as $c ) {
+			$all_by_id[ (int) $c->comment_ID ] = $c;
+		}
+		$root_comments = array_intersect_key( $all_by_id, array_flip( $root_ids ) );
+		uasort(
+			$root_comments,
+			function ( $a, $b ) use ( $order ) {
+				$cmp = strtotime( $a->comment_date ) - strtotime( $b->comment_date );
+				return 'DESC' === $order ? -$cmp : $cmp;
+			}
+		);
+
+		$per_page = $this->per_page( $args );
+		if ( $per_page > 0 ) {
+			// ④ cpage 越界回落末页，避免空列表（吻合「comment-page-2 无评论」实机症状）。
+			$max_pages = max( 1, (int) ceil( count( $root_ids ) / $per_page ) );
+			$cpage     = $this->current_cpage();
+			if ( $cpage > $max_pages ) {
+				$cpage = $max_pages;
+			}
+			$page_root_ids = array_slice( array_keys( $root_comments ), ( $cpage - 1 ) * $per_page, $per_page );
+		} else {
+			$page_root_ids = array_keys( $root_comments );
+		}
+
+		// ② 本页根评论 + 完整后代（全集内筛选，无额外 DB 查询）。
+		$page_ids = $this->collect_page_thread_ids( $all_by_id, $page_root_ids );
+
+		$page_comments = array();
+		foreach ( $all as $c ) {
+			if ( in_array( (int) $c->comment_ID, $page_ids, true ) ) {
+				$page_comments[] = $c;
+			}
+		}
+		// 整体按时间升序交给 wp_list_comments（依 comment_parent 重建嵌套）。
+		usort(
+			$page_comments,
+			function ( $a, $b ) {
+				return strtotime( $a->comment_date ) - strtotime( $b->comment_date );
+			}
+		);
+
+		return $page_comments;
 	}
 
 	/**
@@ -249,51 +284,106 @@ class Berlin_WP_Comments_Renderer {
 	}
 
 	/**
-	 * 顶层评论（thread）总数，用于分页分母。
+	 * 取本产品全部已批准评论（含回复），供线程重建与分页。
 	 *
-	 * AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，
-	 * 故 max_pages 由「parent=0 的评论数」推导，而非全部平面 comment 行。
-	 *
-	 * @param int $post_id 对象 ID。
-	 * @return int
-	 */
-	/**
-	 * 顶层 thread 查询 base 参数（计数与列表查询共用，防口径分叉）。
-	 *
-	 * 分页分母（max_pages）与每页切片必须基于同一组筛选条件（parent=0 / status=approve
-	 * / type=comment），否则会出现「max_pages 虚高、后续页空」的幽灵分页（P6 实机发现：
-	 * 旧版 count_top_level_comments 漏 parent=0 限制，把回复一并计入）。
+	 * 一次性取回（产品评论量通常有限，V1 可接受），避免逐页 DB 查询；
+	 * 后续根判定 / 后代补全均在本数据集内完成。结果按请求内 post_id 缓存。
 	 *
 	 * @param int $post_id 对象 ID。
-	 * @return array
+	 * @return WP_Comment[]
 	 */
-	protected function top_level_base_args( $post_id ) {
-		return array(
-			'post_id' => $post_id,
-			'status'  => 'approve',
-			'type'    => 'comment',
-			'parent'  => 0,
-		);
+	protected function get_all_approved_comments( $post_id ) {
+		if ( ! isset( $this->all_comments_cache[ $post_id ] ) ) {
+			$comments = get_comments(
+				array(
+					'post_id' => $post_id,
+					'status'  => 'approve',
+					'type'    => 'comment',
+					'number'  => 0,
+					'order'   => 'ASC',
+				)
+			);
+			$this->all_comments_cache[ $post_id ] = is_array( $comments ) ? $comments : array();
+		}
+
+		return $this->all_comments_cache[ $post_id ];
 	}
 
 	/**
-	 * 顶层评论（thread）总数，用于分页分母。
+	 * 计算「根评论」ID 集合。
 	 *
-	 * AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，
-	 * 故 max_pages 由「parent=0 的评论数」推导，而非全部平面 comment 行。
+	 * 根 = comment_parent=0，或 parent 指向不存在 / 非本产品已批准评论的「孤儿回复」。
+	 * 这样即便评论数据全是回复（父评论缺失 / 被删），也能作为根正常展示，
+	 * 避免「有计数却无内容」（P6 实机：产品 9 条评论全部为孤儿回复 → 旧 parent=0 过滤致列表为空）。
+	 *
+	 * @param int $post_id 对象 ID。
+	 * @return int[] 根评论 ID。
+	 */
+	protected function get_root_ids( $post_id ) {
+		if ( ! isset( $this->root_ids_cache[ $post_id ] ) ) {
+			$all   = $this->get_all_approved_comments( $post_id );
+			$id_set = array_flip( array_map( 'intval', wp_list_pluck( $all, 'comment_ID' ) ) );
+			$roots = array();
+			foreach ( $all as $c ) {
+				$pid = (int) $c->comment_parent;
+				if ( 0 === $pid || ! isset( $id_set[ $pid ] ) ) {
+					$roots[] = (int) $c->comment_ID;
+				}
+			}
+			$this->root_ids_cache[ $post_id ] = $roots;
+		}
+
+		return $this->root_ids_cache[ $post_id ];
+	}
+
+	/**
+	 * 顶层（根）评论总数，用于分页分母。
+	 *
+	 * P6 修正：分页单位 = 根评论（含孤儿回复根），而非机械按 parent=0 过滤。
+	 * 与 query_comments() 共用 get_root_ids()，杜绝计数 / 列表口径分叉。
 	 *
 	 * @param int $post_id 对象 ID。
 	 * @return int
 	 */
 	protected function count_top_level_comments( $post_id ) {
-		$count = get_comments(
-			array_merge(
-				$this->top_level_base_args( $post_id ),
-				array( 'count' => true )
-			)
-		);
+		return count( $this->get_root_ids( $post_id ) );
+	}
 
-		return (int) $count;
+	/**
+	 * 从全集（all_by_id）中收集给定根评论的完整后代 ID（含根本身）。
+	 *
+	 * 基于预建的 children_map 递归，无额外 DB 查询（AUDIT-008 ① 线程不被切断）。
+	 *
+	 * @param WP_Comment[] $all_by_id 按 comment_ID 索引的评论全集。
+	 * @param int[]        $root_ids  本页根评论 ID。
+	 * @return int[] 根 + 后代 ID 集合。
+	 */
+	protected function collect_page_thread_ids( array $all_by_id, array $root_ids ) {
+		$children_map = array();
+		foreach ( $all_by_id as $c ) {
+			$children_map[ (int) $c->comment_parent ][] = (int) $c->comment_ID;
+		}
+
+		$result = array();
+		foreach ( $root_ids as $rid ) {
+			$rid   = (int) $rid;
+			$result[] = $rid;
+			$queue = array( $rid );
+			while ( ! empty( $queue ) ) {
+				$pid = array_pop( $queue );
+				if ( empty( $children_map[ $pid ] ) ) {
+					continue;
+				}
+				foreach ( $children_map[ $pid ] as $child_id ) {
+					if ( ! in_array( $child_id, $result, true ) ) {
+						$result[] = $child_id;
+						$queue[]  = $child_id;
+					}
+				}
+			}
+		}
+
+		return $result;
 	}
 
 	/**
@@ -335,58 +425,6 @@ class Berlin_WP_Comments_Renderer {
 		return ( 'newest' === $default_page ) ? 'DESC' : 'ASC';
 	}
 
-	/**
-	 * 递归补齐给定父评论的完整后代子树（平面数组，保留 comment_parent）。
-	 *
-	 * AUDIT-008 REQUIRED CORRECTION ①：顶层 thread 分页后，必须把每个顶层评论的
-	 * 全部后代（所有层级）一并取回，否则 wp_list_comments() 依 comment_parent 建树时
-	 * 父节点缺失、thread 被切断。
-	 *
-	 * 后代批量查询使用 WP_Comment_Query 的 `parent__in`（数组参数）；
-	 * 不得使用 `parent`（仅接受单个 int，数组会被 `$wpdb->prepare('... = %d', ...)` 忽略/报错，
-	 * 导致后代取不回、thread 仍被切断）。AUDIT-008 Correction Recheck 据此修正。
-	 *
-	 * @param int[] $parent_ids 顶层评论 ID 数组。
-	 * @param int   $post_id    对象 ID。
-	 * @return WP_Comment[] 后代评论（不含父本身）。
-	 */
-	protected function collect_thread_descendants( array $parent_ids, $post_id ) {
-		$parent_ids = array_filter( array_map( 'intval', $parent_ids ) );
-		if ( empty( $parent_ids ) ) {
-			return array();
-		}
-
-		$descendants = array();
-		$queue       = array_values( $parent_ids );
-		$guard       = 0;
-
-		while ( ! empty( $queue ) && $guard < 50 ) {
-			$guard++;
-
-			$children = get_comments(
-				array(
-					'post_id'    => $post_id,
-					'status'     => 'approve',
-					'type'       => 'comment',
-					'parent__in' => $queue,
-					'order'      => 'ASC',
-					'number'     => 0,
-				)
-			);
-
-			if ( empty( $children ) || ! is_array( $children ) ) {
-				break;
-			}
-
-			foreach ( $children as $c ) {
-				$descendants[] = $c;
-			}
-
-			$queue = array_filter( array_map( 'intval', wp_list_pluck( $children, 'comment_ID' ) ) );
-		}
-
-		return $descendants;
-	}
 
 	/**
 	 * 读取当前评论分页页码（原生 cpage 查询变量）。

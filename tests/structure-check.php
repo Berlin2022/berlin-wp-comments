@@ -448,11 +448,14 @@ bwpc_check(
 	'render_pagination 未使用原生 cpage 链接生成'
 );
 
-// P5 起：query_comments 在 DB 层做分页（number + offset），不依赖 comments_template 上下文。
+// P5 + P6 演进：query_comments 在 PHP 层按根评论分页（array_slice 切片本页根 + 补全其后代），
+// 不依赖 comments_template 上下文；offset 改为全集取回后的 array_slice。
 bwpc_check(
-	false !== strpos( $renderer_src, "'offset'" ) || false !== strpos( $renderer_src, '"offset"' ),
-	'分页在 query 层落地（P5：query_comments 应用 offset）',
-	'query_comments 未应用 offset 分页'
+	false !== strpos( $renderer_src, 'get_root_ids' )
+		&& false !== strpos( $renderer_src, 'array_slice' )
+		&& false !== strpos( $renderer_src, 'collect_page_thread_ids' ),
+	'分页在 query 层落地（P5+P6：get_root_ids 分母 + array_slice 切片本页根 + 后代补全）',
+	'query_comments 未按根评论分页（缺失 get_root_ids / array_slice / collect_page_thread_ids）'
 );
 
 // P5 起：当前页码读取原生 cpage 查询变量。
@@ -481,33 +484,37 @@ bwpc_check(
 	'render_pagination 仍为骨架占位'
 );
 
-// AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，offset 落在 parent=0 上，
-// 不把 thread 从父节点切到下一页（WP_Comment_Query 默认 hierarchical=false）。
+// AUDIT-008 REQUIRED CORRECTION ①（P6 演进）：分页单位 = 根评论（parent=0 或
+// parent 指向缺失/非本产品评论的孤儿回复）；offset 改为 PHP 层 array_slice（全集已取回），
+// 不再做 DB 级 parent=>0 + offset 切片，避免「有计数却无内容」（P6 实机：9 条孤儿回复被
+// parent=0 过滤吞掉）。
 bwpc_check(
-	(bool) preg_match( "/'parent'\s*=>\s*0/", $renderer_src )
-		&& false !== strpos( $renderer_src, "'offset'" ),
-	'分页按顶层 thread 单位（AUDIT-008①：query_comments 以 parent=>0 + offset 切片顶层）',
-	'query_comments 未按顶层评论分页（仍按平面 comment 行切片）'
+	false !== strpos( $renderer_src, 'get_root_ids' )
+		&& false !== strpos( $renderer_src, 'array_slice' )
+		&& false !== strpos( $renderer_src, 'count_top_level_comments' ),
+	'分页按根评论单位（AUDIT-008①+P6：get_root_ids 推导分母 + array_slice 切片本页根）',
+	'query_comments 未按根评论分页（仍按平面 comment 行或 DB offset 切片）'
 );
 
-// AUDIT-008 REQUIRED CORRECTION ①：必须补齐每个顶层 thread 的完整后代，
+// P6 修正：孤儿回复（parent 指向不存在 / 非本产品已批准评论）须作为根展示，
+// 否则计数有值而列表恒空（实机 9 条评论全部为孤儿回复 → 旧 parent=0 过滤致 No comments yet）。
+bwpc_check(
+	false !== strpos( $renderer_src, 'get_root_ids' )
+		&& false !== strpos( $renderer_src, 'comment_parent' )
+		&& false !== strpos( $renderer_src, '0 === $pid' ),
+	'孤儿回复作根（P6：parent 不在本产品已批准评论集时视为根，列表不再恒空）',
+	'未将孤儿回复识别为根评论，仍可能被 parent=0 过滤吞掉'
+);
+
+// AUDIT-008 REQUIRED CORRECTION ①：必须补齐每个根 thread 的完整后代，
 // 否则 wp_list_comments 依 comment_parent 建树时父节点缺失。
+// P6 演进：后代从已取回全集内按 children_map 递归收集（collect_page_thread_ids），
+// 不再走 DB 级 parent__in 批量查询（避免分页切断 thread 的同时消除额外 DB 往返）。
 bwpc_check(
-	false !== strpos( $renderer_src, 'collect_thread_descendants' )
-		&& false !== strpos( $renderer_src, 'wp_list_pluck' ),
-	'thread 后代补全（AUDIT-008①：collect_thread_descendants 补齐后代子树）',
-	'未补齐顶层评论的后代，分页会切断 thread'
-);
-
-// AUDIT-008 Correction Recheck：collect_thread_descendants 批量取后代必须使用
-// WP_Comment_Query 的 parent__in（数组参数）；不得改用数组值的 parent（仅接受单个 int，
-// %d 准备会忽略/报错，导致后代取不回、thread 仍被切断）。结构自检 PASS ≠ 行为契约闭合，
-// 故以显式契约断言锁住该参数，防同类回归。
-bwpc_check(
-	(bool) preg_match( "/'parent__in'\s*=>/", $renderer_src )
-		&& ! (bool) preg_match( "/'parent'\s*=>\s*\\$queue/", $renderer_src ),
-	'后代批量查询用 parent__in（AUDIT-008 Recheck：collect_thread_descendants 不得用数组 parent）',
-	'render_pagination 后代 fetch 未使用 parent__in 或仍误用数组 parent'
+	false !== strpos( $renderer_src, 'collect_page_thread_ids' )
+		&& false !== strpos( $renderer_src, 'children_map' ),
+	'thread 后代补全（AUDIT-008①+P6：collect_page_thread_ids + children_map 递归补全）',
+	'未补齐根评论的后代，分页会切断 thread'
 );
 
 // AUDIT-008 REQUIRED CORRECTION ②：per_page() 实际消费 page_comments 总开关。

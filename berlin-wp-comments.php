@@ -44,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.8' );
+define( 'BWPC_VERSION', '0.1.9' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

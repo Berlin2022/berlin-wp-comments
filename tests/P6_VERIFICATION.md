@@ -121,3 +121,24 @@
 2. 确认线上 `class-comments-renderer.php` 与仓库 `30c93a7` 后（含本加固）一致：`query_comments()` 含 `max_pages` 钳制、`render_pagination()` 由 `count_top_level_comments()` 推导。
 3. 清缓存后重测：各 comment-page-N 均显示相同页码集合（如 1,2,3）且均有对应评论；无空页。
 4. WebFetch 复核：`https://www.vosalen.com/product/dark-lion-phone-case/` 当前解析到的产品（实测返回「Adjustable Elbow Foldable Antenna, SKU 4562」而非 phone case）——确认测试所用 slug 仍指向预期产品，避免跨产品评论集混淆。
+
+---
+
+## P6 实机发现四（2026-08-30，vosalen.com）：「9 Comments」但列表恒为「No comments yet.」+ 1,2,3 空页
+
+**现象**：标题显示 `9 Comments`（计数有值），但评论列表每页均显示 `No comments yet.`，分页器仍出现 1,2,3（空页）。
+
+**根因（源码坐实）**：`count_comments()`（标题计数）计**全部**已批准评论（无 `parent` 过滤）→ 9；而旧 `query_comments()` 以 `parent => 0` 只取顶层评论。该产品的 9 条评论**全部为「孤儿回复」**（`comment_parent` 指向缺失 / 非本产品已批准评论），被 `parent=0` 过滤后列表恒空 → 「有计数却无内容」。分页器 1,2,3 为线上旧版 `count_top_level_comments()`（漏 `parent=0`）虚高所致。
+
+**已落地修复（commit → master，v0.1.9）**：重写分页模型——
+- `get_all_approved_comments()` 一次性取回本产品全部已批准评论（请求内 `all_comments_cache` 缓存）；
+- `get_root_ids()` 判定「根评论」= `parent=0` **或** `parent` 不在本产品已批准评论集内的孤儿回复 → 孤儿回复作根，**不再被 `parent=0` 吞掉**；
+- `query_comments()` 本页 = 根评论按 `default_comments_page` 方向排序后 `array_slice` 切片 + 其完整后代（`collect_page_thread_ids()` 由全集按 `children_map` 递归收集，无额外 DB 查询）；
+- `count_top_level_comments()` 与 `query_comments()` 共用 `get_root_ids()`，计数/列表口径彻底一致 → 幽灵分页 + 空列表同时消除。
+- `structure-check` 静态回归守卫同步更新为根评论分页契约（90/90 通过）。
+
+**实机复核清单（用户执行）**：
+1. 把 `892f34c` 之后的渲染器替换为 **v0.1.9**（`includes/class-comments-renderer.php` 整文件 + `berlin-wp-comments.php` 版本号 + `CHANGELOG.md`），覆盖线上旧版。
+2. 清空站点/CDN 全页缓存（尤其 `/product/*/comment-page-*`）。
+3. 预期：标题 `9 Comments` 与列表内容一致——若 9 条均为孤儿回复，则作为 9 个根评论按每页数分页展示（如每页 3 → 3 页均有内容，无空页）；正常顶层评论 + 回复的线程结构亦保持完整。
+4. 顺带复核 O5 六步（含 thread 不被切断）+ O8 零 `gravatar.com` + Reply 内联三项，全过即建 CHK-014（P6 实机验收锚点）。
