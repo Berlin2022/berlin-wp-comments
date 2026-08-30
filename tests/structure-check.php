@@ -533,6 +533,28 @@ bwpc_check(
 );
 
 /* -------------------------------------------------------------------------
+ * 8. CSS 维度写法有效性（AUDIT-009 回归防护）
+ *    CP1 在 AUDIT-009 复核中要求：任何 <number><space><unit> 的非法 CSS
+ *    dimension 写法（如 `14 px`、`1.25 em`）不得进入 CSS，否则浏览器视为
+ *    无效声明直接丢弃。此处静态扫描 assets/css 下所有 CSS 文件。
+ * ------------------------------------------------------------------------- */
+echo implode( "\n", $report ) . "\n\n8. CSS 维度写法有效性（AUDIT-009 回归防护）\n";
+$report = array();
+
+$css_files = (array) glob( $root . '/assets/css/*.css' );
+$bad_css   = array();
+foreach ( $css_files as $f ) {
+	$rel   = str_replace( '\\', '/', substr( $f, strlen( $root ) + 1 ) );
+	$lines = file( $f );
+	foreach ( $lines as $i => $line ) {
+		if ( preg_match( '/\d\s+(px|em|rem|%|vh|vw|s|ms)\b/', $line ) ) {
+			$bad_css[] = $rel . ':' . ( $i + 1 );
+		}
+	}
+}
+bwpc_check( empty( $bad_css ), 'CSS 无非法 dimension 写法（number 与 unit 无空格）', '命中于：' . implode( ', ', $bad_css ) );
+
+/* -------------------------------------------------------------------------
  * 汇总
  * ------------------------------------------------------------------------- */
 echo implode( "\n", $report ) . "\n\n";

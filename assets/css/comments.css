@@ -1,15 +1,15 @@
 /**
  * Berlin WP Comments — front-end styles.
  *
- * 设计约束（P6 轻量 / P9 主题无关）：
- *   - 全部类名以 .bwpc 开头，避免与主题碰撞。
- *   - 不引入 CSS 框架 / @import / web font。
- *   - 字号、颜色、行高尽量 inherit，融入主题而非对抗主题。
- *   - 仅含 shortcode 的页面才会加载本样式（见 class-comments-shortcode.php）。
+ * Design constraints (P6 lightweight / P9 theme-agnostic):
+ *   - All class names prefixed with .bwpc to avoid collisions with the theme.
+ *   - No CSS framework / @import / web font.
+ *   - Font-size, color, line-height mostly inherit to blend with the theme.
+ *   - Only loaded on pages that contain the shortcode (see class-comments-shortcode.php).
  */
 
 .bwpc {
-	--bwpc-accent: #c8732a; /* 品牌橙兜底色；如需跟随主题可覆盖此变量 */
+	--bwpc-accent: #c8732a; /* Brand-orange fallback; override this variable to follow the theme */
 	--bwpc-border: #e6e6e6;
 	--bwpc-muted: #777777;
 	font-size: inherit;
@@ -29,7 +29,7 @@
 	margin: 0 0 1em;
 }
 
-/* 列表：wp_list_comments 包裹 <ol class="comment-list">，回复用 <ol class="children"> */
+/* List: wp_list_comments wraps <ol class="comment-list">; replies use <ol class="children"> */
 .bwpc .comment-list,
 .bwpc .children {
 	list-style: none;
@@ -109,7 +109,7 @@
 	text-decoration: underline;
 }
 
-/* 分页 */
+/* Pagination */
 .bwpc__pager {
 	display: flex;
 	flex-wrap: wrap;
@@ -139,7 +139,7 @@
 	border-color: var(--bwpc-accent);
 }
 
-/* 表单 */
+/* Form */
 .bwpc__form {
 	margin-top: 24px;
 }
