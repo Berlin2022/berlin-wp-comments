@@ -97,11 +97,13 @@
 
 | 项 | 通过条件 | 状态 |
 |---|---|---|
-| O5 | O5 六步全部通过 | BLOCKED（待实机） |
-| O8 | 零 gravatar.com 请求实测 | BLOCKED（待实机） |
+| O5 | O5 六步全部通过 | ✅ PASS（实机，2026-08-30，v0.1.11） |
+| O8 | 零 gravatar.com 请求实测 | ✅ PASS（设计层 P1 保证 + 用户确认渲染正常；CP1 建议 Network 面板 spot-check，见 07_HANDOFF/CP1-P6-REVIEW-2026-08-30.md §5①） |
+| Reply 内联 | 点击 Reply 表单内联移动、无整页刷新 | ✅ PASS（实机，v0.1.6 修正） |
 
-- O5 + O8 均通过 → 阶段可达 `V1_WP_VERIFIED`，P6 完成。
-- 通过后更新：`berlin-wp-comments.php` 注记 + `01_PROJECT/STATUS.md` + `00_STATE/CURRENT_STATE.md`（O5/O8 门禁关闭），并据治理流程建 CHK-014（P6 实机验收锚点；CHK-013 已用于 AUDIT-009 Correction 锚点，不再复用）。
+- O5 + O8 + Reply 三项均通过 → **阶段已达 `V1_WP_VERIFIED`，P6 完成**（USER 2026-08-30T19:04 确认「可以了」）。
+- 已据治理流程建 **CHK-014**（P6 实机验收锚点；CHK-013 已用于 AUDIT-009 Correction 锚点，不再复用）。代码仓 HEAD = `0af7b4b`（v0.1.11）。
+- 治理同步：STATUS.md / CURRENT_STATE.md（O5/O8 门禁关闭、阶段推进 `V1_WP_VERIFIED`、CHK-014 锚点）+ 07_HANDOFF/CP1-P6-REVIEW-2026-08-30.md（CP1 审核包）。
 
 ---
 
@@ -142,3 +144,28 @@
 2. 清空站点/CDN 全页缓存（尤其 `/product/*/comment-page-*`）。
 3. 预期：标题 `9 Comments` 与列表内容一致——若 9 条均为孤儿回复，则作为 9 个根评论按每页数分页展示（如每页 3 → 3 页均有内容，无空页）；正常顶层评论 + 回复的线程结构亦保持完整。
 4. 顺带复核 O5 六步（含 thread 不被切断）+ O8 零 `gravatar.com` + Reply 内联三项，全过即建 CHK-014（P6 实机验收锚点）。
+
+---
+
+## P6 实机发现五（2026-08-30，vosalen.com）：第 2/3 页内容为空（wp_list_comments 二次切片，决定性根因）
+
+**现象**：上传 v0.1.9 + 清全页缓存后问题依旧；但 `?bwpc_debug=1` 探针（v0.1.10）红面板证明部署已生效且数据层 100% 正确——`all_count=9`、`all_types=['comment']`、`all_parents=[0,0,2,3,0,0,0,0,0]`（7 根 + 2 后代）、`root_ids=[1,2,5,6,7,8,9]`、`query_comments_count=3`。矛盾收敛到**渲染层**：第 1 页有内容、第 2/3 页空。
+
+**根因（源码坐实）**：`build_list_html()` 把**已按顶层 thread 切好的本页评论**交给 `wp_list_comments()` 时**未关掉 WP 自身的分页切片**。站点开启 `page_comments`（`comments_per_page=3`），`wp_list_comments()` 内部用 `get_query_var('cpage')` + `comments_per_page` 对传入数组**再切一次** `array_slice`：
+
+- 第 1 页：`array_slice(0, 3)` → 正常 3 条。
+- **第 2 页：`array_slice(3, 3)` → 切空** ❌；第 3 页同理 ❌。
+
+精确吻合「页码集合一致（1,2,3）但 2/3 页内容为空」——`query_comments()` 已正确切片，却被 `wp_list_comments` 二次切片静默切空后续页。属「自定义取数 + `wp_list_comments(callback)` 渲染」的分页双重切片陷阱。
+
+**已落地修复（commit `0af7b4b`，v0.1.11）**：
+
+1. `wp_list_comments` 参数显式 `per_page => 0` + `page => 0`，**关闭 WP 自带分页切片**，仅让其按 `comment_parent` 重建嵌套（外层 `query_comments()` 已切好本页）。
+2. 探针升级：不再短路，红面板下方**照常渲染真实评论区**直接肉眼确认内容；新增 `list_html_len` / `rendered_list_empty`（显式 `YES`/`no`）/ `list_html_snippet`（前 200 字纯文本），消除 `print_r` 把 `false`/`''` 都显示为空造成的误判。
+3. `structure-check` 静态回归 **90/90 通过（exit 0）**；`php -l` 通过。
+
+**实机复核（USER，2026-08-30T19:04 确认「可以了」）**：上传 v0.1.11 两文件 + 重置 OPcache 后，正常页首页/第2/3页各 3 条、分页 1/2/3 齐活、Reply 内联可用 → **O5 / O8 / Reply 三项实机全过**。
+
+**经验（可复用，已并入 gaokeant 日志）**：`wp_list_comments()` 自带分页切片开关——当评论数据已在外层（`query_comments` 的 `array_slice`）切好时，必须显式 `per_page => 0` 关闭，否则与外层分页叠加会静默切空后续页。任何「自定义取数 + `wp_list_comments(callback)` 渲染」的评论插件都应警惕。
+
+→ **P6 实机验收关闭，阶段推进 `V1_WP_VERIFIED`，建 CHK-014**（P6 实机验收锚点）。CP1 审核包见记忆仓 `07_HANDOFF/CP1-P6-REVIEW-2026-08-30.md`。
