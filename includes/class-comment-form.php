@@ -69,10 +69,20 @@ class Berlin_WP_Comments_Form {
 
 		$form_args = $this->get_form_args( $args );
 
+		// v0.1.12：预备文件上传 —— 仅本次表单渲染期间为 <form> 注入
+		// enctype="multipart/form-data"，使将来接管 $_FILES['bwpc_comment_attachment']
+		// 时文件可被提交（不污染站点原生评论表单）。
+		$enctype_cb = function () {
+			echo ' enctype="multipart/form-data"';
+		};
+		add_filter( 'comment_form_tag', $enctype_cb );
+
 		// comment_form() 直接 echo，故 ob 捕获为字符串交由 shortcode 装配（P4）。
 		ob_start();
 		comment_form( $form_args );
 		$form_html = (string) ob_get_clean();
+
+		remove_filter( 'comment_form_tag', $enctype_cb );
 
 		// 经模板输出（支持主题覆盖，P9）；模板只包裹、不自造 <form>。
 		return $this->plugin->render_template(
@@ -112,14 +122,20 @@ class Berlin_WP_Comments_Form {
 			// 接管字段标签，强制英文（否则 zh_CN 站点下核心翻成"名/电子邮件/网站"）。
 			// v0.1.12：给 input 加 placeholder 作视觉标签（"文字放到 label 内"），
 			// 原 <label> 仍渲染但由 CSS sr-only 隐藏以保 a11y。占位符色 #b3b3b3。
-			'fields'              => array(
-				'author' => '<p class="comment-form-author"><label for="author">' . __( 'Name', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
-				            '<input id="author" name="author" type="text" placeholder="' . esc_attr__( 'Name *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>',
-				'email'  => '<p class="comment-form-email"><label for="email">' . __( 'Email', 'berlin-wp-comments' ) . ' <span class="required">*</span></label> ' .
-				            '<input id="email" name="email" type="text" placeholder="' . esc_attr__( 'Email *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>',
-				'url'    => '<p class="comment-form-url"><label for="url">' . __( 'Website', 'berlin-wp-comments' ) . '</label> ' .
-				            '<input id="url" name="url" type="text" placeholder="' . esc_attr__( 'Website', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_url'] ) . '" size="30" maxlength="200" /></p>',
-			),
+		// v0.1.12 表单布局（用户需求）：
+		//  - Name + Email 同一行（flex 行 .bwpc-form-row）；占位符即标签，原 <label> 视觉隐藏保 a11y。
+		//  - Website(url) 字段移除。
+		//  - 预留 Attachment 文件上传字段（先不接管后端；表单已加 multipart 以备）。
+		'fields'              => array(
+			'author' => '<div class="bwpc-form-row">'
+				. '<p class="comment-form-author"><label for="author">' . __( 'Name', 'berlin-wp-comments' ) . ' <span class="required">*</span></label>'
+				. '<input id="author" name="author" type="text" placeholder="' . esc_attr__( 'Name *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author'] ) . '" size="30" maxlength="245" autocomplete="name" required="required" /></p>'
+				. '<p class="comment-form-email"><label for="email">' . __( 'Email', 'berlin-wp-comments' ) . ' <span class="required">*</span></label>'
+				. '<input id="email" name="email" type="text" placeholder="' . esc_attr__( 'Email *', 'berlin-wp-comments' ) . '" value="' . esc_attr( $commenter['comment_author_email'] ) . '" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>'
+				. '</div>',
+			'attachment' => '<p class="comment-form-attachment"><label for="bwpc-comment-attachment">' . __( 'Attachment', 'berlin-wp-comments' ) . '</label>'
+				. '<input id="bwpc-comment-attachment" name="bwpc_comment_attachment" type="file" accept="image/*,.pdf" /></p>',
+		),
 			// 接管评论正文：加 placeholder "Your comment *"，使标签视觉放进输入框。
 			'comment_field'       => '<p class="comment-form-comment"><label for="comment">' . _x( 'Comment', 'noun', 'berlin-wp-comments' ) . '</label> ' .
 			                          '<textarea id="comment" name="comment" placeholder="' . esc_attr__( 'Your comment *', 'berlin-wp-comments' ) . '" cols="45" rows="8" maxlength="65525" required="required" aria-required="true"></textarea></p>',
