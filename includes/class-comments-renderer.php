@@ -72,13 +72,6 @@ class Berlin_WP_Comments_Renderer {
 	public function render_list( array $args ) {
 		$post_id = $this->resolve_post_id( $args );
 
-		// 调试探针（?bwpc_debug=1，仅管理员）：输出真实运行期数据，定位
-		// 「有计数却无内容 / 空分页」类实机问题。同时作为部署生效试纸——
-		// 若线上显示本红色面板，说明含 get_root_ids 的新代码已真正生效。
-		if ( ! empty( $_GET['bwpc_debug'] ) && current_user_can( 'manage_options' ) ) {
-			return $this->debug_panel( $post_id, $args );
-		}
-
 		// ④ 仅当前对象；无有效对象则不渲染。
 		if ( ! $post_id ) {
 			return '';
@@ -97,7 +90,7 @@ class Berlin_WP_Comments_Renderer {
 
 		$count = $this->count_comments( $post_id );
 
-		return $this->plugin->render_template(
+		$html = $this->plugin->render_template(
 			'comments',
 			array(
 				'args'  => $args,
@@ -107,6 +100,15 @@ class Berlin_WP_Comments_Renderer {
 				'count' => $count,
 			)
 		);
+
+		// 调试探针（?bwpc_debug=1，仅管理员）：**不短路**——红面板下方照常渲染真实
+		// 评论区，既能定位「有计数却无内容 / 空分页」类实机问题，也能直接肉眼确认
+		// 内容是否渲染。同时作为部署生效试纸：看到红面板=含 get_root_ids 的新码已生效。
+		if ( ! empty( $_GET['bwpc_debug'] ) && current_user_can( 'manage_options' ) ) {
+			$html = $this->debug_panel( $post_id, $args, $comments, $list ) . $html;
+		}
+
+		return $html;
 	}
 
 	/**
@@ -114,13 +116,15 @@ class Berlin_WP_Comments_Renderer {
 	 *
 	 * 输出真实运行期数据，用于定位「有计数却无内容 / 空分页」类实机问题：
 	 * 实际取回的评论数、comment_type 分布、comment_parent 分布、根评论判定、
-	 * 分页参数与 query_comments 实际返回条数。
+	 * 分页参数与 query_comments 实际返回条数、最终列表 HTML 长度与片段。
 	 *
-	 * @param int   $post_id 解析到的对象 ID。
-	 * @param array $args    参数。
+	 * @param int          $post_id  解析到的对象 ID。
+	 * @param array        $args     参数。
+	 * @param WP_Comment[] $comments query_comments 实际返回的本页评论。
+	 * @param string       $list     已生成的列表 HTML（真实渲染产物）。
 	 * @return string 调试 HTML。
 	 */
-	protected function debug_panel( $post_id, array $args ) {
+	protected function debug_panel( $post_id, array $args, array $comments, $list ) {
 		$out = array(
 			'BWPC_VERSION'       => defined( 'BWPC_VERSION' ) ? BWPC_VERSION : '(undefined)',
 			'has_get_root_ids'   => method_exists( $this, 'get_root_ids' ),
@@ -142,9 +146,11 @@ class Berlin_WP_Comments_Renderer {
 		$out['opt_comments_per_page']  = get_option( 'comments_per_page' );
 		$out['opt_default_comments_page'] = get_option( 'default_comments_page' );
 
-		$comments = $this->query_comments( $post_id, $args );
 		$out['query_comments_count'] = count( $comments );
-		$out['rendered_list_empty']  = ( '' === $this->build_list_html( $comments, $args ) );
+		// 显式输出布尔/长度，避免 print_r 把 false/'' 都显示为空造成误判。
+		$out['rendered_list_empty']  = ( '' === $list ) ? 'YES' : 'no';
+		$out['list_html_len']        = is_string( $list ) ? strlen( $list ) : -1;
+		$out['list_html_snippet']    = is_string( $list ) ? mb_substr( wp_strip_all_tags( $list ), 0, 200 ) : '';
 
 		if ( $all ) {
 			$sample        = (array) $all[0];
@@ -198,12 +204,18 @@ class Berlin_WP_Comments_Renderer {
 			'avatar_size' => $avatar_size,
 			'callback'    => array( $this, 'render_comment' ),
 			'echo'        => false,
+			// ⚠️ P6 实机关键修复：站点开启 page_comments 时，wp_list_comments 会用
+			// get_query_var('cpage') + comments_per_page 对传入的评论数组「再切一次片」。
+			// 但本页评论已由 query_comments 按顶层 thread 切好（含完整后代），若放任 WP
+			// 二次切片，第 2/3 页会被 array_slice 切空（实机症状：页码一致但内容为空）。
+			// 显式 per_page=0 关闭 WP 自身的分页切片，仅让其按 comment_parent 重建嵌套。
+			'per_page'    => 0,
+			'page'        => 0,
 		);
 
 		// 分页已在 query_comments 层完成（AUDIT-008 ①：以顶层 thread 为单位的
 		// number+offset + 后代补全）；当前页评论已是「完整 thread 集合」，此处仅交给
-		// wp_list_comments 依 comment_parent 重建线程，不再传 per_page/page，避免
-		// 与 DB 级分页重复切片（OPEN_ITEMS ③ 方案 A）。
+		// wp_list_comments 依 comment_parent 重建线程（per_page=0 已禁止其重复切片）。
 		// wp_list_comments 第二参接受评论数组，无需污染全局 $wp_query。
 		$html = wp_list_comments( $list_args, $comments );
 
