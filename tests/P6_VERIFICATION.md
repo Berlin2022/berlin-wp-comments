@@ -63,4 +63,4 @@
 | O8 | 零 gravatar.com 请求实测 | BLOCKED（待实机） |
 
 - O5 + O8 均通过 → 阶段可达 `V1_WP_VERIFIED`，P6 完成。
-- 通过后更新：`berlin-wp-comments.php` 注记 + `01_PROJECT/STATUS.md` + `00_STATE/CURRENT_STATE.md`（O5/O8 门禁关闭），并据治理流程建 CHK-013（P6 实机验收锚点）。
+- 通过后更新：`berlin-wp-comments.php` 注记 + `01_PROJECT/STATUS.md` + `00_STATE/CURRENT_STATE.md`（O5/O8 门禁关闭），并据治理流程建 CHK-014（P6 实机验收锚点；CHK-013 已用于 AUDIT-009 Correction 锚点，不再复用）。
