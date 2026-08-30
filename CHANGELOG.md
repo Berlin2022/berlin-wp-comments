@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.8] — UNRELEASED
+
+> P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。
+
+- **幽灵分页页根因修复（P6 实机发现）**：`comment-page-2/3` 无评论内容、但分页器显示 1,2,3（页码一致）——实机根因为线上 `class-comments-renderer.php` 为旧版，`count_top_level_comments()` 计数时漏 `parent=0` 限制，把「顶层评论 + 全部回复」一起计入，致 `max_pages` 虚高、后续页 offset 落到空处。当前仓库计数已限 `parent=0`（与列表查询同口径），本提交进一步将两处查询参数抽取为共用 `top_level_base_args()`，彻底杜绝口径分叉（防漂移）。线上须重新上传 `includes/class-comments-renderer.php` 至本版本方生效；若产品顶层 thread 数 ≤ 每页数，分页器将正确消失（单页线程展示），此为预期正确行为。
+
 ## [0.1.7] — UNRELEASED
 
 > P6 实机发现修正（2026-08-30，vosalen.com 真实 WP）。

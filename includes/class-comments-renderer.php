@@ -193,13 +193,11 @@ class Berlin_WP_Comments_Renderer {
 		$per_page = $this->per_page( $args );
 		$order    = $this->top_level_order( $args );
 
-		$top_args = array(
-			'post_id' => $post_id,
-			'status'  => 'approve',
-			'type'    => 'comment',
-			'parent'  => 0,
-			'order'   => $order,
-		);
+		// 与 count_top_level_comments() 共用同一组筛选 base（parent=0 / status=approve /
+		// type=comment），杜绝计数与列表查询口径分叉 → 不会产生幽灵分页页（P6 实机：
+		// 旧版 count 漏 parent=0 限制，把回复也计入，致 max_pages 虚高、后续页空）。
+		$top_args = $this->top_level_base_args( $post_id );
+		$top_args['order'] = $order;
 
 		if ( $per_page > 0 ) {
 			// ① 分页单位 = 顶层 thread：number+offset 落在 parent=0 上，
@@ -259,14 +257,39 @@ class Berlin_WP_Comments_Renderer {
 	 * @param int $post_id 对象 ID。
 	 * @return int
 	 */
+	/**
+	 * 顶层 thread 查询 base 参数（计数与列表查询共用，防口径分叉）。
+	 *
+	 * 分页分母（max_pages）与每页切片必须基于同一组筛选条件（parent=0 / status=approve
+	 * / type=comment），否则会出现「max_pages 虚高、后续页空」的幽灵分页（P6 实机发现：
+	 * 旧版 count_top_level_comments 漏 parent=0 限制，把回复一并计入）。
+	 *
+	 * @param int $post_id 对象 ID。
+	 * @return array
+	 */
+	protected function top_level_base_args( $post_id ) {
+		return array(
+			'post_id' => $post_id,
+			'status'  => 'approve',
+			'type'    => 'comment',
+			'parent'  => 0,
+		);
+	}
+
+	/**
+	 * 顶层评论（thread）总数，用于分页分母。
+	 *
+	 * AUDIT-008 REQUIRED CORRECTION ①：分页单位 = 顶层 thread，
+	 * 故 max_pages 由「parent=0 的评论数」推导，而非全部平面 comment 行。
+	 *
+	 * @param int $post_id 对象 ID。
+	 * @return int
+	 */
 	protected function count_top_level_comments( $post_id ) {
 		$count = get_comments(
-			array(
-				'post_id' => $post_id,
-				'status'  => 'approve',
-				'type'    => 'comment',
-				'parent'  => 0,
-				'count'   => true,
+			array_merge(
+				$this->top_level_base_args( $post_id ),
+				array( 'count' => true )
 			)
 		);
 
