@@ -2,6 +2,18 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
+## [0.1.13] — UNRELEASED
+
+> 落地上一版「为将来预留」的评论附件完整链路 + 分页非当前页可见性微调 + P3 表单契约细化（v0.1.12 自渲染后旧契约已不适用）。
+
+- **评论附件完整链路**：v0.1.12 已预备表单 UI（`<input type="file">` + `enctype="multipart/form-data"`），CHANGELOG 明确标注「为将来预留」。本版本落地「接 → 存 → 读 → 清理」全链路。新模块 `class Bwpc_Comment_Attachment`（`includes/class-bwpc-attachment.php`）接管 `comment_post` 钩子 → 复用核心 `wp_handle_upload()` + `wp_insert_attachment()` + `wp_generate_attachment_metadata()` 入媒体库 → `update_comment_meta()` 关联评论（`_bwpc_attachment_id` + `_bwpc_attachment_url`）。同时注册 `deleted_comment` / `trash_comment` / `spam_comment` 三路清理钩子同步 `wp_delete_attachment()` 物理删。MIME 白名单默认 `image/jpeg, image/png, image/webp, image/gif, application/pdf`，大小上限默认 5 MB，均可由过滤器 `bwpc_attachment_allowed_mimes` / `bwpc_attachment_max_bytes` 扩展。**仅 approved 评论挂附件**，避免待审/垃圾评论留下需清理的附件。`templates/comment.php` 调用静态助手 `Bwpc_Comment_Attachment::render_media( $comment_id )` 输出 `<div class="bwpc-comment__media">…</div>`：图片渲染 thumbnail 包链接（点击看大图，`loading="lazy"`），其它（PDF）输出 📎 + 文件名文档卡；attachment 已被清理 / 无权限 → 静默返回空。
+- **评论分页非当前页可见性修复**（实机截图 vosalen / 2026-08-30）：旧版 `.bwpc-pager__link` 边框色 `var(--vosalen-border): #E5E7EB` 在白底上对比度过弱，肉眼几乎不可见；当前页 `.bwpc-pager__current` 用主色实心填充 + 白字 → 截图中「1」显眼、「2/3」看起来无样式。v0.1.13 拆分两组选择器（非当前页不再与当前页共用组合选择器），非当前页改用 `#D1D5DB` 边框 + 显式白底 + 字重 500 + `cursor: pointer`；hover 主色软底 + 主色边框 + 主色文字；active 下沉 1px 按下反馈；当前页加 `cursor: default` + `user-select: none` 防误点；`:focus-visible` 键盘可达描边。
+- **静态自检契约细化**（102/102 PASS，旧基线 90 → 新基线 102）：
+  - 新增 5 项 v0.1.13 契约：`attachment 模块注册 4 个生命周期钩子` / `attachment 模块已装配` / `templates/comment.php 调用 render_media + 输出 .bwpc-comment__media` / `.bwpc-pager__link 含 #D1D5DB 分页可见性守门` / `LICENSE` 等已存在文件补 required_files 守门。
+  - **P3 表单契约重写**（v0.1.12 自渲染后旧契约必然 FAIL，必须细化才能继续守门）：
+    - 原「调用核心 `comment_form`」 → 新「不再调用核心 `comment_form()`」（脱离 WP 内部排序漂移）
+    - 原「不自造 `<form>`」 → 新「`action` 仍指 `/wp-comments-post.php` + `id="respond"` + 保留 `do_action('comment_form', $post_id)` 扩展位 + 不自造 nonce」（核心端点不破、第三方扩展不丢、nonce 不双写）
+
 ## [0.1.12] — UNRELEASED
 
 > 内置 B2B 视觉主题（SI-001 成果并入核心，撤销原「站点层 override」红线）。

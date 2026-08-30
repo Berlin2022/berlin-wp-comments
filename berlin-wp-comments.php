@@ -3,7 +3,7 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       Minimal WordPress native comments enhancer — Shortcode + local avatars + native comments. WordPress owns the data and lifecycle; this plugin only handles presentation and avatars.
- * Version:           0.1.12
+ * Version:           0.1.13
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Berlin
@@ -17,7 +17,7 @@
  * ---------------------------------------------------------------------------
  * 版本声明
  * ---------------------------------------------------------------------------
- * V1_RELEASED（v0.1.11 已发布；v0.1.12 内置 B2B 视觉主题 SI-001 并入核心）。P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现并经 AUDIT-008 局部修正（thread 安全分页 + per_page 消费 page_comments/default_comments_page）+ AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30）；P6 实机验证 O5/O8/Reply 已 PASS（vosalen.com 真实 WP，CHK-014 = STABLE，AUDIT-010 = ACCEPT，2026-08-30）。0.1.6：修正 Reply 点击整页重载 → 原生内联回复（respond_id 对齐核心包裹层 + 无条件入队 comment-reply 脚本；P6 实机发现 2026-08-30）。0.1.12：SI-001 视觉主题（Made-in-China/Alibaba B2B 风格）并入核心，由 enqueue_assets() 在 comments.css 后自动加载。
+ * V1_RELEASED（v0.1.11 已发布；v0.1.12 内置 B2B 视觉主题 SI-001 并入核心；v0.1.13 落地预留的评论附件完整链路 + 分页可见性修复 + P3 表单契约细化）。P1 本地头像已实现；P2 评论渲染器 + 模板已实现；P3 评论表单已实现；P4 短代码 + 条件资源已实现；P5 原生 cpage 分页已实现并经 AUDIT-008 局部修正（thread 安全分页 + per_page 消费 page_comments/default_comments_page）+ AUDIT-008 Correction Recheck（最终）= ACCEPT（P5 修正关闭，2026-08-30）；P6 实机验证 O5/O8/Reply 已 PASS（vosalen.com 真实 WP，CHK-014 = STABLE，AUDIT-010 = ACCEPT，2026-08-30）。0.1.6：修正 Reply 点击整页重载 → 原生内联回复（respond_id 对齐核心包裹层 + 无条件入队 comment-reply 脚本；P6 实机发现 2026-08-30）。0.1.12：SI-001 视觉主题（Made-in-China/Alibaba B2B 风格）并入核心，由 enqueue_assets() 在 comments.css 后自动加载。0.1.13：评论附件完整链路落地（v0.1.12 CHANGELOG 明确标注「为将来预留」）—— `class Bwpc_Comment_Attachment`（`comment_post` 接管 + 媒体库入库 + 3 路生命周期清理）+ `render_media()` 静态助手 + 模板输出 `.bwpc-comment__media`；分页非当前页边框色 `#D1D5DB` 强化视觉对比；P3 表单契约细化（自渲染后，旧 P3 契约「调用 comment_form / 不自造 form」不再适用，必须明确为「自渲染 + action=/wp-comments-post.php + id=respond + 保留 do_action + 不自造 nonce」）；静态自检 90 → 102。
  *
  * 架构：WordPress 负责数据与生命周期，本插件负责呈现与头像（CP1 决策 D3/D4）。
  * 已落地：
@@ -44,7 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.12' );
+define( 'BWPC_VERSION', '0.1.13' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
