@@ -2,7 +2,14 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.15] — UNRELEASED
+## [0.1.16] — UNRELEASED
+
+> 评论列表改为时间倒序（最新评论在前）。
+
+- **评论列表倒序（最新在前）**：`includes/class-comments-renderer.php` 的 `query_comments()` 重写本页评论组装——顶层根评论按 `$order`（DESC）排列各组，组内仍按时间升序（父评论先于子评论）以保证 `wp_list_comments` 依 `comment_parent` 正确重建嵌套。原第 328 行 `usort` 把整页强制按时间**升序**平铺，覆盖根评论方向排序，导致列表永远"最老在前"；已替换为按 `page_root_ids`（`$order` 方向）分组组装。同时 `top_level_order()` 固定返回 `DESC`（产品站评论列表固定最新在前，用户明确要求 2026-08-31；如需跟随后台 `default_comments_page` 设置可改回判断）。
+- 版本 `0.1.15 → 0.1.16` + `define('BWPC_VERSION','0.1.16')`。
+
+## [0.1.15] — 2026-08-31 (RELEASED)
 
 > 修复「启用插件即 fatal error」的激活期致命问题（用户实机报告，2026-08-31）。
 

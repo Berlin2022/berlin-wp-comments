@@ -315,22 +315,19 @@ class Berlin_WP_Comments_Renderer {
 			$page_root_ids = array_keys( $root_comments );
 		}
 
-		// ② 本页根评论 + 完整后代（全集内筛选，无额外 DB 查询）。
-		$page_ids = $this->collect_page_thread_ids( $all_by_id, $page_root_ids );
-
+		// ② 本页根评论 + 完整后代，按顶层 $order 排列各组（组内按 $all 的 ASC 顺序
+		//    => 父评论先于子评论，wp_list_comments 才能依 comment_parent 正确重建嵌套）。
+		//    顶层组顺序跟随 $order：DESC = 最新根评论在前（用户要求，2026-08-31）。
 		$page_comments = array();
-		foreach ( $all as $c ) {
-			if ( in_array( (int) $c->comment_ID, $page_ids, true ) ) {
-				$page_comments[] = $c;
+		foreach ( $page_root_ids as $rid ) {
+			$rid = (int) $rid;
+			$thread_ids = $this->collect_page_thread_ids( $all_by_id, array( $rid ) );
+			foreach ( $all as $c ) { // $all 为 ASC（get_all_approved_comments order=ASC），保证父先于子。
+				if ( in_array( (int) $c->comment_ID, $thread_ids, true ) ) {
+					$page_comments[] = $c;
+				}
 			}
 		}
-		// 整体按时间升序交给 wp_list_comments（依 comment_parent 重建嵌套）。
-		usort(
-			$page_comments,
-			function ( $a, $b ) {
-				return strtotime( $a->comment_date ) - strtotime( $b->comment_date );
-			}
-		);
 
 		return $page_comments;
 	}
@@ -492,8 +489,9 @@ class Berlin_WP_Comments_Renderer {
 	 * @return string 'ASC' | 'DESC'
 	 */
 	protected function top_level_order( array $args ) {
-		$default_page = get_option( 'default_comments_page', 'oldest' );
-		return ( 'newest' === $default_page ) ? 'DESC' : 'ASC';
+		// 产品站评论列表固定「最新评论在前」（用户明确要求，2026-08-31）；
+		// 若需跟随 WP 后台「default_comments_page」设置，改回下方判断即可。
+		return 'DESC';
 	}
 
 
