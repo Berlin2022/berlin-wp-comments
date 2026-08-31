@@ -85,6 +85,9 @@ class Bwpc_Attachment_Storage_WP implements Bwpc_Attachment_Storage {
 	/** @var int 单文件大小上限（bytes）。 */
 	private $max_bytes;
 
+	/** @var string 最近一次 store() 失败原因（供 ?bwpc_debug 探针读取，仅管理员可见）。 */
+	private static $last_error = '';
+
 	/**
 	 * @param string[] $mimes     允许的 MIME 类型。
 	 * @param int      $max_bytes 单文件大小上限（bytes）。
@@ -95,14 +98,25 @@ class Bwpc_Attachment_Storage_WP implements Bwpc_Attachment_Storage {
 	}
 
 	/**
+	 * 取最近一次 store() 失败原因（调试用，仅 ?bwpc_debug 探针读取）。
+	 *
+	 * @return string
+	 */
+	public static function last_error() {
+		return self::$last_error;
+	}
+
+	/**
 	 * 持久化一个已上传的文件。
 	 *
 	 * @param array $file 单文件上传数组。
 	 * @return int attachment ID；0 表示失败。
 	 */
 	public function store( array $file ) {
+		self::$last_error = '';
 		// 大小校验（服务端硬校验，防前端绕过）。
 		if ( empty( $file['size'] ) || (int) $file['size'] > $this->max_bytes ) {
+			self::$last_error = 'size_exceeded:' . (int) ( isset( $file['size'] ) ? $file['size'] : 0 ) . '>' . $this->max_bytes;
 			return 0;
 		}
 
@@ -119,6 +133,7 @@ class Bwpc_Attachment_Storage_WP implements Bwpc_Attachment_Storage {
 		);
 
 		if ( ! is_array( $upload ) || empty( $upload['file'] ) || ! empty( $upload['error'] ) ) {
+			self::$last_error = 'wp_handle_upload:' . ( ! empty( $upload['error'] ) ? $upload['error'] : 'no_file_returned' );
 			return 0;
 		}
 
@@ -134,6 +149,7 @@ class Bwpc_Attachment_Storage_WP implements Bwpc_Attachment_Storage {
 		$attach_id = wp_insert_attachment( $attachment, $upload['file'] );
 		if ( is_wp_error( $attach_id ) || ! $attach_id ) {
 			// ATTACHMENT-001 #12 修正：插入失败立即清理已落盘物理文件，避免孤立文件。
+			self::$last_error = 'wp_insert_attachment_failed';
 			@unlink( $upload['file'] ); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged
 			return 0;
 		}

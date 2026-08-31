@@ -136,7 +136,9 @@ class Bwpc_Comment_Attachment {
 	/**
 	 * 评论提交钩子：把 $_FILES['bwpc_comment_attachment'] 入库到媒体库 + 关联 meta。
 	 *
-	 * 仅当评论状态为 approved 时挂附件（避免对 spam/trash 留附件导致清理复杂度）。
+	 * 提交即上传（无论评论是否已批准）：后台批准时 $_FILES 早已不可用，
+	 * 必须在提交这一刻完成 store（待审评论的附件用 _bwpc_attachment_pending 暂存，
+	 * 由 on_approve() 在评论批准时转正）。
 	 * 任何失败均静默返回——评论本身已成功提交，附件是附属，不应让其失败阻塞提交体验。
 	 *
 	 * @param int        $comment_id  WP 新评论 ID。
@@ -145,9 +147,18 @@ class Bwpc_Comment_Attachment {
 	 * @return void
 	 */
 	public function handle_upload( $comment_id, $approved, $commentdata ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+		$diag = array(
+			'ts'             => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+			'comment_id'     => (int) $comment_id,
+			'approved_param' => $approved,
+		);
+
 		// 防御：非本插件表单的提交（含他人共用 wp-comments-post.php、或核心默认表单），
 		// $_FILES['bwpc_comment_attachment'] 通常为空字符串 / 不存在 → 直接返回。
 		if ( empty( $_FILES['bwpc_comment_attachment']['name'] ) ) {
+			$diag['received'] = false;
+			$diag['outcome']  = 'no_file_in_request';
+			$this->record_upload_debug( $diag );
 			return;
 		}
 
@@ -155,40 +166,67 @@ class Bwpc_Comment_Attachment {
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput
 		$f = $_FILES['bwpc_comment_attachment'];
 		if ( ! is_array( $f ) || empty( $f['name'] ) ) {
+			$diag['received'] = false;
+			$diag['outcome']  = 'files_entry_invalid';
+			$this->record_upload_debug( $diag );
 			return;
 		}
 
+		$diag['received']  = true;
+		$diag['name']      = $f['name'];
+		$diag['size']      = isset( $f['size'] ) ? (int) $f['size'] : null;
+		$diag['type']      = isset( $f['type'] ) ? $f['type'] : null;
+		$diag['php_error'] = isset( $f['error'] ) ? (int) $f['error'] : null;
+
 		// 上传错误码检查。
 		if ( ! empty( $f['error'] ) && UPLOAD_ERR_OK !== (int) $f['error'] ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( '[BWPC] attachment upload PHP error code %d (comment %d)', (int) $f['error'], (int) $comment_id ) );
-			}
+			$diag['outcome'] = 'php_upload_error:' . (int) $f['error'];
+			$this->record_upload_debug( $diag );
 			return;
 		}
 		// phpcs:enable WordPress.Security.ValidatedSanitizedInput
 
 		// 持久化委托给 Storage Provider（ATTACHMENT-001 §8）：
 		// 适配层不直接调用 wp_handle_upload / wp_insert_attachment，仅依赖接口。
-		// 注意：无论评论是否已批准都先入库——后台批准时 $_FILES 早已不可用，
-		// 必须在提交这一刻完成 store（待审评论的附件用 _bwpc_attachment_pending 暂存，
-		// 由 on_approve() 在评论批准时转正）。
 		$attach_id = $this->storage()->store( $f );
+		$diag['store_result']     = (int) $attach_id;
+		$diag['store_last_error'] = Bwpc_Attachment_Storage_WP::last_error();
+
 		if ( ! $attach_id ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( '[BWPC] attachment store() failed for comment %d (file=%s) — check uploads dir perms / MIME / size', (int) $comment_id, $f['name'] ) );
-			}
-			// 上传 / 插入失败均静默返回——评论本身已成功提交（#16 不破坏评论核心）；
-			// 插入失败产生的孤儿物理文件由 Provider::store() 内部 @unlink 兜底（#12 修正）。
+			$diag['outcome'] = 'store_failed';
+			$this->record_upload_debug( $diag );
 			return;
 		}
 
 		$is_approved = ( 1 === (int) $approved || '1' === $approved || 'approve' === $approved );
+		$diag['is_approved'] = $is_approved;
 		if ( $is_approved ) {
 			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_ID, (int) $attach_id );
 			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $this->storage()->get_url( $attach_id ) ) );
+			$diag['meta_written'] = self::META_ATTACHMENT_ID;
 		} else {
 			// 待审评论：文件已落媒体库，暂存 pending；批准后由 on_approve() 转正为正式关联。
 			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_PENDING, (int) $attach_id );
+			$diag['meta_written'] = self::META_ATTACHMENT_PENDING;
+		}
+		$diag['outcome'] = 'attached';
+		$this->record_upload_debug( $diag );
+	}
+
+	/**
+	 * 把最近一次上传诊断写入 transient，供 ?bwpc_debug=1 探针读取（仅管理员可见）。
+	 *
+	 * 仅在提交评论且本插件表单含附件字段时写入；不影响任何正常逻辑。
+	 *
+	 * @param array $diag 诊断数据。
+	 * @return void
+	 */
+	protected function record_upload_debug( array $diag ) {
+		if ( function_exists( 'set_transient' ) ) {
+			set_transient( 'bwpc_last_upload_debug', $diag, HOUR_IN_SECONDS );
+		}
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+			error_log( '[BWPC] upload diag ' . print_r( $diag, true ) ); // phpcs:ignore WordPress.PHP.OutputFunctions
 		}
 	}
 

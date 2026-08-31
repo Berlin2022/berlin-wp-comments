@@ -2,7 +2,14 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.19] — UNRELEASED
+## [0.1.20] — UNRELEASED
+
+> 运行期上传探针（调试用，仅管理员 `?bwpc_debug=1` 可见）：把每次评论提交的附件上传真实状态写入 transient，供定位「图片传到哪 / 为何没传」。
+
+- **上传诊断探针**：`Bwpc_Comment_Attachment::handle_upload()` 每次提交都把 `$_FILES` 是否收到、PHP 错误码、文件大小/类型、`$approved` 取值、`store()` 返回 ID、store 失败原因、最终关联 meta key 写入 `bwpc_last_upload_debug` transient（1 小时有效）；`Bwpc_Attachment_Storage_WP::store()` 新增 `last_error()` 静态方法记录最近失败原因（size_exceeded / wp_handle_upload:<err> / wp_insert_attachment_failed）。`class-comments-renderer.php` 的 `?bwpc_debug=1` 面板新增 `last_upload_debug` 字段，提交一次带图评论后刷新该页面即可看到完整上传链路证据。WP_DEBUG 开启时同时 `error_log('[BWPC] upload diag ...')`。不影响任何正常逻辑，仅管理员可见。
+- 版本 `0.1.19 → 0.1.20` + `define('BWPC_VERSION','0.1.20')`。
+
+## [0.1.19] — 2026-08-31 (RELEASED)
 
 > 修复实机「图片上传不显示」：①评论审核导致附件永不关联；②MIME 白名单格式错误导致 wp_handle_upload 在旧 WP 被拒。
 

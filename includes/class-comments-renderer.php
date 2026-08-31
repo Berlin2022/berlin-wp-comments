@@ -159,6 +159,12 @@ class Berlin_WP_Comments_Renderer {
 			$out['sample_comment']        = $sample;
 		}
 
+		// 附件上传诊断（最近一次评论提交时由 handle_upload 写入 transient）。
+		$up = function_exists( 'get_transient' ) ? get_transient( 'bwpc_last_upload_debug' ) : null;
+		if ( $up ) {
+			$out['last_upload_debug'] = $up;
+		}
+
 		$html  = '<div style="border:2px solid #c00;background:#fff;color:#111;padding:12px;margin:12px 0;font:12px/1.4 monospace;white-space:pre-wrap;word-break:break-all;">';
 		$html .= '<strong>bwpc_debug</strong> — Berlin WP Comments 运行期探针<br><br>';
 		$html .= esc_html( print_r( $out, true ) );
