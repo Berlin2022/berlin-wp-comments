@@ -59,6 +59,15 @@
   max-width: var(--vosalen-content-max);
   margin: 36px 0;
   color: var(--vosalen-text);
+
+  /* 评论列表框（v0.1.14）：视觉对齐 .bwpc-pager__current
+     — 主色 1px 边框 + 圆角，无背景填充（用户指定"不需要背景"）。
+     作用域锁定 .bwpc，不污染主题；box-sizing 保持 max-width 含边框。 */
+  box-sizing: border-box;
+  border: 1px solid var(--bwpc-accent);
+  border-radius: var(--vosalen-radius);
+  background: transparent;
+  padding: 22px 24px;
 }
 
 /* =========================================================================
@@ -579,6 +588,7 @@
   .bwpc {
     --vosalen-content-max: 100%;
     margin: 22px 0;
+    padding: 16px 14px;
   }
   .bwpc__title { font-size: 1.2em; }
 

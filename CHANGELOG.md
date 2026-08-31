@@ -2,7 +2,13 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.13] — UNRELEASED
+## [0.1.14] — UNRELEASED
+
+> 评论列表框视觉对齐 `.bwpc-pager__current`（CP2 视觉标准：框体元素统一用主色边框 + 圆角语言；用户指定"不需要背景"）。
+
+- **评论列表框（`.bwpc` 容器）边框化**：`.bwpc` 外层容器新增 `border: 1px solid var(--bwpc-accent)` + `border-radius: var(--vosalen-radius)` + `background: transparent`（无填充）+ `padding: 22px 24px`（`box-sizing: border-box` 保持 `max-width` 含边框，不撑破版面）。移动端（≤600px）padding 收窄为 `16px 14px`。评论标题 / 卡片 / 分页 / 表单整体被统一收进主色描边卡片，与分页当前页按钮视觉语言一致。作用域锁定 `.bwpc`，不污染主题；站点 Additional CSS 仍可同级覆盖。
+
+## [0.1.13] — 2026-08-30 (RELEASED)
 
 > 落地上一版「为将来预留」的评论附件完整链路 + 分页非当前页可见性微调 + P3 表单契约细化（v0.1.12 自渲染后旧契约已不适用）。
 

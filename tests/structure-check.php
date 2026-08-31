@@ -597,6 +597,15 @@ bwpc_check(
 	'berlin-wp-comments-vosalen.css 缺少清晰的非当前页边框色（默认 #E5E7EB 对比度过弱）'
 );
 
+// v0.1.14: 评论列表框视觉契约（CP2 视觉标准：框体元素统一主色边框 + 圆角语言；用户指定"不需要背景"）。
+bwpc_check(
+	false !== strpos( $vosalen_css, '.bwpc {' )
+		&& false !== strpos( $vosalen_css, 'border: 1px solid var(--bwpc-accent)' )
+		&& false !== strpos( $vosalen_css, 'background: transparent' ),
+	'评论列表框契约（v0.1.14：.bwpc 主色边框 + 圆角 + 无背景填充，对齐 .bwpc-pager__current）',
+	'berlin-wp-comments-vosalen.css 的 .bwpc 未定义主色边框 / 背景未设为 transparent'
+);
+
 /* -------------------------------------------------------------------------
  * 8. CSS 维度写法有效性（AUDIT-009 回归防护）
  *    CP1 在 AUDIT-009 复核中要求：任何 <number><space><unit> 的非法 CSS
