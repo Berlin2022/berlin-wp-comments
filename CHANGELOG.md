@@ -2,7 +2,18 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.14] — UNRELEASED
+## [0.1.15] — UNRELEASED
+
+> 修复「启用插件即 fatal error」的激活期致命问题（用户实机报告，2026-08-31）。
+
+- **激活期致命修复（根因：PHP 版本兼容性 + 防御性守卫）**：
+  - 主文件 `register_activation_hook` / `register_deactivation_hook` 原使用 `static function () {}` 静态闭包——该语法 **PHP 7.0 才引入**，在更低版本 PHP 上会被解析为语法错误，导致启用即白屏致命。改为普通 `function () {}`（钩子体内不使用 `$this`，行为等价）。
+  - 主文件顶部新增**最低 PHP 版本守卫**：`PHP_VERSION_ID < 70000` 时注册 `admin_notices` 提示并 `return` 安全退出，把「白屏 fatal」降级为可读后台提示（显示当前 PHP 版本），便于排障。
+  - `Requires PHP` 头由 `7.4` 下调为 `7.0`，与实际代码最低要求对齐（全工程已无 `??` / `fn()=>` / `match` / 类型属性 / `str_contains` 等 7.1+ 语法）。
+  - 6 个 `require_once` 全部加 `class_exists()` 守卫，规避服务器存在同名重复插件副本时「Class already declared」致命。
+- 版本 `0.1.14 → 0.1.15` + `define('BWPC_VERSION','0.1.15')`。
+
+## [0.1.14] — 2026-08-31 (RELEASED)
 
 > 评论列表框视觉对齐 `.bwpc-pager__current`（CP2 视觉标准：框体元素统一用主色边框 + 圆角语言；用户指定"不需要背景"）。
 

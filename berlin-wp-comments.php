@@ -3,9 +3,9 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       Minimal WordPress native comments enhancer — Shortcode + local avatars + native comments. WordPress owns the data and lifecycle; this plugin only handles presentation and avatars.
- * Version:           0.1.14
+ * Version:           0.1.15
  * Requires at least: 6.0
- * Requires PHP:      7.4
+ * Requires PHP:      7.0
  * Author:            Berlin
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -42,9 +42,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * 最低 PHP 版本守卫。
+ *
+ * 低于 PHP 7.0 时（例如主文件早先用到的 static 闭包在旧版本是解析错误），
+ * 给出可读的后台提示并安全退出，避免白屏致命（fatal error）。
+ */
+if ( PHP_VERSION_ID < 70000 ) {
+	add_action(
+		'admin_notices',
+		function () {
+			echo '<div class="notice notice-error"><p><strong>Berlin WP Comments</strong> 需要 PHP 7.0 或更高版本，当前服务器运行的是 PHP ' . esc_html( PHP_VERSION ) . '。请升级服务器 PHP 版本后再启用本插件。</p></div>';
+		}
+	);
+	return;
+}
+
+/**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.14' );
+define( 'BWPC_VERSION', '0.1.15' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -71,12 +87,24 @@ define( 'BWPC_SHORTCODE_ALIAS', 'wp_comments' );
  * 骨架期使用显式 require，不引入 Composer 自动加载——
  * 保持零依赖（P6 轻量原则）。
  */
-require_once BWPC_PLUGIN_DIR . 'includes/class-plugin.php';
-require_once BWPC_PLUGIN_DIR . 'includes/class-avatar.php';
-require_once BWPC_PLUGIN_DIR . 'includes/class-bwpc-attachment.php';
-require_once BWPC_PLUGIN_DIR . 'includes/class-comments-renderer.php';
-require_once BWPC_PLUGIN_DIR . 'includes/class-comment-form.php';
-require_once BWPC_PLUGIN_DIR . 'includes/class-comments-shortcode.php';
+if ( ! class_exists( 'Berlin_WP_Comments_Plugin' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-plugin.php';
+}
+if ( ! class_exists( 'Berlin_WP_Comments_Avatar' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-avatar.php';
+}
+if ( ! class_exists( 'Bwpc_Comment_Attachment' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-bwpc-attachment.php';
+}
+if ( ! class_exists( 'Berlin_WP_Comments_Renderer' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-comments-renderer.php';
+}
+if ( ! class_exists( 'Berlin_WP_Comments_Form' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-comment-form.php';
+}
+if ( ! class_exists( 'Berlin_WP_Comments_Shortcode' ) ) {
+	require_once BWPC_PLUGIN_DIR . 'includes/class-comments-shortcode.php';
+}
 
 /**
  * 取插件主实例。
@@ -98,7 +126,7 @@ add_action( 'plugins_loaded', 'bwpc' );
  */
 register_activation_hook(
 	__FILE__,
-	static function () {
+	function () {
 		// 骨架期：无操作。不建表、不写选项、不改重写规则。
 	}
 );
@@ -110,7 +138,7 @@ register_activation_hook(
  */
 register_deactivation_hook(
 	__FILE__,
-	static function () {
+	function () {
 		// 骨架期：无操作。
 	}
 );
