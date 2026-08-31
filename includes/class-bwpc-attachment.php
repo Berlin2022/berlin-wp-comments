@@ -7,9 +7,11 @@
  * 起源（SI-001 视觉主题 v0.1.12 落地后）：
  *   表单 UI 已预备 `<input type="file" name="bwpc_comment_attachment">` 与
  *   `<form enctype="multipart/form-data">`，但后端保存与前端展示均为零。
- *   v0.1.13 起接管 `$_FILES['bwpc_comment_attachment']`，复用 WP 核心
- *   `wp_handle_upload()` + `wp_insert_attachment()`（与媒体库同款，零自造管道），
- *   将附件注册到 Media Library，再以 comment_meta 关联评论。
+ *   v0.1.13 起接管 `$_FILES['bwpc_comment_attachment']`，以 comment_meta 关联评论。
+ *   v0.1.18 起物理持久化委托给 Storage Provider（includes/class-bwpc-attachment-storage.php）：
+ *   本适配层只依赖 `Bwpc_Attachment_Storage` 接口，默认 `Bwpc_Attachment_Storage_WP`
+ *   封装 WP 核心 `wp_handle_upload()` + `wp_insert_attachment()`（与媒体库同款，零自造管道）。
+ *   未来可注入 R2 等对象存储提供方，评论核心与适配层代码不变（ATT-P002 Storage Agnostic）。
  *
  * 生命周期钩子：
  *   - comment_post        保存（仅评论批准后挂附件；待审/垃圾不挂，避免清理复杂度）
@@ -43,6 +45,16 @@ class Bwpc_Comment_Attachment {
 	const META_ATTACHMENT_URL = '_bwpc_attachment_url';
 
 	/**
+	 * 存储提供方（ATTACHMENT-001 §8 Storage Adapter Boundary）。
+	 *
+	 * null = 使用默认 WP 媒体库提供方（惰性构建，确保过滤器时序）。
+	 * 未来可注入 Bwpc_Attachment_Storage_R2 等实现，附件适配层代码不变。
+	 *
+	 * @var Bwpc_Attachment_Storage|null
+	 */
+	private $storage;
+
+	/**
 	 * 注册全部钩子。
 	 *
 	 * 由 Berlin_WP_Comments_Plugin::boot() 在 plugins_loaded 之后调用。
@@ -54,6 +66,31 @@ class Bwpc_Comment_Attachment {
 		add_action( 'deleted_comment',    array( $this, 'cleanup' ),       10, 2 );
 		add_action( 'trash_comment',      array( $this, 'cleanup' ),       10, 2 );
 		add_action( 'spam_comment',       array( $this, 'cleanup' ),       10, 2 );
+	}
+
+	/**
+	 * 构造（允许注入存储提供方，默认使用 WP 媒体库）。
+	 *
+	 * @param Bwpc_Attachment_Storage|null $storage 可选自定义存储提供方（如 R2）。
+	 * @return void
+	 */
+	public function __construct( $storage = null ) {
+		$this->storage = $storage;
+	}
+
+	/**
+	 * 取存储提供方（惰性构建默认 WP 实现）。
+	 *
+	 * 默认提供方在首次使用时构建，确保 allowed_mimes / max_bytes 过滤器
+	 * 在评论提交时刻（comment_post，晚于 init）才求值，而非激活期冻结。
+	 *
+	 * @return Bwpc_Attachment_Storage
+	 */
+	private function storage() {
+		if ( null === $this->storage ) {
+			$this->storage = new Bwpc_Attachment_Storage_WP( $this->allowed_mimes(), $this->max_bytes() );
+		}
+		return $this->storage;
 	}
 
 	/**
@@ -126,54 +163,21 @@ class Bwpc_Comment_Attachment {
 		}
 
 		// 大小校验（$f['size'] 在前端已被浏览器可知，但服务端仍需自验防绕过）。
-		if ( ! empty( $f['size'] ) && (int) $f['size'] > $this->max_bytes() ) {
-			return;
-		}
+		// 注：最终大小上限由 Storage Provider 内部再次硬校验（防前端绕过 + 适配 R2 等后端）。
 		// phpcs:enable WordPress.Security.ValidatedSanitizedInput
 
-		// 复用 WP 媒体库上传管道。
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-
-		$upload = wp_handle_upload(
-			$f,
-			array(
-				'test_form' => false,                           // 不走 is_user_logged_in 测试，前台匿名用户可上传
-				'mimes'     => $this->allowed_mimes(),
-				'action'    => 'bwpc_comment_attachment',
-			)
-		);
-
-		if ( ! is_array( $upload ) || empty( $upload['file'] ) ) {
+		// 持久化委托给 Storage Provider（ATTACHMENT-001 §8）：
+		// 适配层不直接调用 wp_handle_upload / wp_insert_attachment，仅依赖接口。
+		$attach_id = $this->storage()->store( $f );
+		if ( ! $attach_id ) {
+			// 上传 / 插入失败均静默返回——评论本身已成功提交（#16 不破坏评论核心）；
+			// 插入失败产生的孤儿物理文件由 Provider::store() 内部 @unlink 兜底（#12 修正）。
 			return;
-		}
-		if ( ! empty( $upload['error'] ) ) {
-			return;
-		}
-
-		// 注册到 Media Library（得到 attachment ID）。
-		$wp_filetype = wp_check_filetype( $upload['file'] );
-		$attachment  = array(
-			'guid'           => $upload['url'],
-			'post_mime_type' => $wp_filetype['type'] ? $wp_filetype['type'] : 'application/octet-stream',
-			'post_title'     => sanitize_file_name( basename( $upload['file'] ) ),
-			'post_content'   => '',
-			'post_status'    => 'inherit',
-		);
-		$attach_id = wp_insert_attachment( $attachment, $upload['file'] );
-		if ( is_wp_error( $attach_id ) || ! $attach_id ) {
-			return;
-		}
-
-		// 生成附件元数据（图片会生成 thumbnails；PDF 走默认元数据即可）。
-		require_once ABSPATH . 'wp-admin/includes/image.php';
-		$attach_data = wp_generate_attachment_metadata( $attach_id, $upload['file'] );
-		if ( is_array( $attach_data ) ) {
-			wp_update_attachment_metadata( $attach_id, $attach_data );
 		}
 
 		// 关联到评论 meta。
 		update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_ID, (int) $attach_id );
-		update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $upload['url'] ) );
+		update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $this->storage()->get_url( $attach_id ) ) );
 	}
 
 	/**
@@ -190,8 +194,8 @@ class Bwpc_Comment_Attachment {
 
 		$aid = (int) get_comment_meta( $comment_id, self::META_ATTACHMENT_ID, true );
 		if ( $aid > 0 ) {
-			// 第二个参数 true = 真删（物理删除文件 + 数据库行），与 WP 媒体库交互保持一致。
-			wp_delete_attachment( $aid, true );
+			// 经 Storage Provider 删除（含物理文件），不直接调用 wp_delete_attachment（#15 解耦）。
+			$this->storage()->delete( $aid );
 		}
 
 		delete_comment_meta( $comment_id, self::META_ATTACHMENT_ID );
@@ -220,14 +224,17 @@ class Bwpc_Comment_Attachment {
 			return '';
 		}
 
-		$post = get_post( $aid );
-		if ( ! $post || 'attachment' !== $post->post_type ) {
-			// attachment 已被 wp_delete_attachment 清掉（评论在前台展示时刚好附件被回收） → 静默返回。
+		// 经 Storage Provider 读取（#15 解耦：不在适配层裸调 WP 媒体 API）。
+		// 读路径仅需 get_url / exists，使用默认 WP 提供方即可（无策略注入需求）。
+		$storage = new Bwpc_Attachment_Storage_WP( array(), 0 );
+		if ( ! $storage->exists( $aid ) ) {
+			// attachment 已被删除（评论在前台展示时刚好附件被回收） → 静默返回。
 			return '';
 		}
 
-		$mime = (string) $post->post_mime_type;
-		$url  = (string) wp_get_attachment_url( $aid );
+		$post = get_post( $aid );
+		$mime = $post ? (string) $post->post_mime_type : '';
+		$url  = $storage->get_url( $aid );
 		if ( '' === $url ) {
 			return '';
 		}

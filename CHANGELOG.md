@@ -2,7 +2,17 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.17] — UNRELEASED
+## [0.1.18] — UNRELEASED
+
+> ATTACHMENT-001 CP1 审计收口（ACCEPT WITH CORRECTIONS）：修复 #12 孤儿文件 + #15 Storage Boundary 抽象。
+
+- **#15 Storage Boundary 抽象（CP1 审计要求，R2 可延期但边界不能延期）**：新增 `includes/class-bwpc-attachment-storage.php`，定义 `interface Bwpc_Attachment_Storage`（store / get_url / delete / exists）与默认实现 `class Bwpc_Attachment_Storage_WP`（封装 `wp_handle_upload` + `wp_insert_attachment` + `wp_delete_attachment`）。`class-bwpc-attachment.php` 不再直连 WP 媒体 API，改为依赖接口（惰性构建默认 WP 提供方，确保 `allowed_mimes` / `max_bytes` 过滤器在 `comment_post` 时刻求值而非激活期冻结）。未来新增 `Bwpc_Attachment_Storage_R2` 即插即用，评论核心与适配层代码不变（ATT-P002 Storage Agnostic）。
+- **#12 孤儿文件修正**：`Bwpc_Attachment_Storage_WP::store()` 在 `wp_insert_attachment` 失败（WP_Error / 0）时立即 `@unlink( $upload['file'] )` 清理已落盘物理文件，杜绝「评论成功 + 附件插入失败 → 游离孤儿」。`handle_upload()` 全程静默返回，不阻断评论提交（#16 仍成立）。
+- `render_media()` 读取路径经 Storage Provider 接口（exists / get_url），适配层不裸调 WP 媒体 API。
+- 结构自检 `tests/structure-check.php` 新增 3 项契约：存储接口存在、适配层不直连 WP 媒体 API、插入失败清理孤儿。
+- 版本 `0.1.17 → 0.1.18` + `define('BWPC_VERSION','0.1.18')`。
+
+## [0.1.17] — 2026-08-31 (RELEASED)
 
 > 评论附件上传控件改为英文（覆盖中文浏览器原生 file 控件的中文按钮）。
 

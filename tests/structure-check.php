@@ -606,6 +606,37 @@ bwpc_check(
 	'berlin-wp-comments-vosalen.css 的 .bwpc 未定义主色边框 / 背景未设为 transparent'
 );
 
+// v0.1.18: ATTACHMENT-001 #15 Storage Boundary —— 存储抽象必须存在，且适配层不得直连 WP 媒体 API。
+$storage_src = is_file( $root . '/includes/class-bwpc-attachment-storage.php' )
+	? bwpc_strip_comments( file_get_contents( $root . '/includes/class-bwpc-attachment-storage.php' ) )
+	: '';
+
+bwpc_check(
+	false !== strpos( $storage_src, 'interface Bwpc_Attachment_Storage' )
+		&& false !== strpos( $storage_src, 'class Bwpc_Attachment_Storage_WP' )
+		&& false !== strpos( $storage_src, 'implements Bwpc_Attachment_Storage' ),
+	'Storage Provider 抽象存在（#15：interface Bwpc_Attachment_Storage + WP 适配器 implements）',
+	'class-bwpc-attachment-storage.php 缺少接口或 WP 适配器实现'
+);
+
+// 适配层（class-bwpc-attachment.php）不得直接调用 WP 媒体 API；必须经过 Storage Provider 接口。
+// 注意：Storage Provider 文件（class-bwpc-attachment-storage.php）允许且应该调用这些 API。
+bwpc_check(
+	false === strpos( $attachment_src, 'wp_handle_upload(' )
+		&& false === strpos( $attachment_src, 'wp_insert_attachment(' )
+		&& false === strpos( $attachment_src, 'wp_delete_attachment(' ),
+	'附件适配层不直连 WP 媒体 API（#15：必须经 Bwpc_Attachment_Storage 接口）',
+	'class-bwpc-attachment.php 仍直接调用 wp_handle_upload / wp_insert_attachment / wp_delete_attachment'
+);
+
+// v0.1.18: ATTACHMENT-001 #12 修正 —— 插入失败必须清理已落盘物理文件，避免孤儿。
+bwpc_check(
+	false !== strpos( $storage_src, '@unlink' )
+		&& false !== strpos( $storage_src, 'is_wp_error( $attach_id )' ),
+	'插入失败清理孤儿文件（#12：Bwpc_Attachment_Storage_WP::store 中 wp_insert_attachment 失败 @unlink）',
+	'Storage_WP::store 缺少插入失败物理文件清理'
+);
+
 /* -------------------------------------------------------------------------
  * 8. CSS 维度写法有效性（AUDIT-009 回归防护）
  *    CP1 在 AUDIT-009 复核中要求：任何 <number><space><unit> 的非法 CSS
