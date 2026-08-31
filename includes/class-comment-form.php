@@ -118,11 +118,27 @@ class Berlin_WP_Comments_Form {
 		</p>
 	</div>
 
-	<?php // 2) Attachment — 文件上传预留（前/后端都可继续接；当前仅 UI） ?>
+	<?php // 2) Attachment — 文件上传（自定义英文控件，覆盖浏览器原生 file 的中文按钮） ?>
 	<p class="comment-form-attachment">
 		<label for="bwpc-comment-attachment"><?php esc_html_e( 'Attachment', 'berlin-wp-comments' ); ?></label>
-		<input id="bwpc-comment-attachment" name="bwpc_comment_attachment" type="file" accept="image/*,.pdf" />
+		<span class="bwpc-attachment-field">
+			<label for="bwpc-comment-attachment" class="bwpc-file-btn"><?php esc_html_e( 'Choose File', 'berlin-wp-comments' ); ?></label>
+			<span class="bwpc-file-name" id="bwpc-file-name"><?php esc_html_e( 'No file chosen', 'berlin-wp-comments' ); ?></span>
+		</span>
+		<input id="bwpc-comment-attachment" name="bwpc_comment_attachment" type="file" accept="image/*,.pdf" class="bwpc-file-input" />
 	</p>
+	<?php // 选中文件后回显文件名（极简内联脚本，避免在中文浏览器下显示原生「未选择任何文件」） ?>
+	<script>
+	(function () {
+		var input = document.getElementById('bwpc-comment-attachment');
+		var name = document.getElementById('bwpc-file-name');
+		if (input && name) {
+			input.addEventListener('change', function () {
+				name.textContent = input.files && input.files.length ? input.files[0].name : <?php echo wp_json_encode( __( 'No file chosen', 'berlin-wp-comments' ) ); ?>;
+			});
+		}
+	})();
+	</script>
 
 	<?php // 3) Comment textarea — placeholder="Your comment *"（占位符即标签） ?>
 	<p class="comment-form-comment">

@@ -2,7 +2,14 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.16] — UNRELEASED
+## [0.1.17] — UNRELEASED
+
+> 评论附件上传控件改为英文（覆盖中文浏览器原生 file 控件的中文按钮）。
+
+- **附件上传控件英文化**：原 `<input type="file">` 在中文语言环境的浏览器下会强制显示"选择文件 / 未选择任何文件"原生按钮（该文本由浏览器本地化、不受 PHP 文本域控制）。改为自定义英文控件：隐藏原生 input，用 `<label class="bwpc-file-btn">Choose File</label>` 触发选择，旁附 `<span class="bwpc-file-name">No file chosen</span>` 显示已选文件名；`class-comment-form.php` 追加一段极简内联脚本（`<input id="bwpc-comment-attachment" change>` 事件）回显文件名。字段名 `name="bwpc_comment_attachment"` 不变，后端 `class-bwpc-attachment.php` 接管逻辑不受影响。`assets/css/berlin-wp-comments-vosalen.css` 对应新增 `.bwpc-file-input`（视觉隐藏）/ `.bwpc-file-btn`（主色描边按钮）/ `.bwpc-file-name` 样式。注：新增内联脚本属对 CP1 约束「V1 自有 JS 0 KB」的微小偏离，仅服务附件文件名回显，无需 enqueue 独立 JS 文件。
+- 版本 `0.1.16 → 0.1.17` + `define('BWPC_VERSION','0.1.17')`。
+
+## [0.1.16] — 2026-08-31 (RELEASED)
 
 > 评论列表改为时间倒序（最新评论在前）。
 
