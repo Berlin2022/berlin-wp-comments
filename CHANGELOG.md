@@ -2,7 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。所有条目按时间倒序排列。
 
-## [0.1.18] — UNRELEASED
+## [0.1.19] — UNRELEASED
+
+> 修复实机「图片上传不显示」：①评论审核导致附件永不关联；②MIME 白名单格式错误导致 wp_handle_upload 在旧 WP 被拒。
+
+- **待审评论兼容（实机根因 #1）**：`handle_upload()` 不再仅 approved 才挂附件，改为**提交即上传**（无论 approved），approved 立即关联 `_bwpc_attachment_id`，pending 暂存 `_bwpc_attachment_pending`；新增 `transition_comment_status` 钩子 `on_approve()`，待审评论在后台批准时把 pending 转正为正式关联（提交时刻 `$_FILES` 已不可用，必须在提交时完成 store）。`cleanup()` 同步清理正式 + pending 两路 meta（待审评论被删也清 pending 附件，无孤儿）。
+- **MIME 白名单格式修正（实机根因 #2）**：`allowed_mimes()` 原返回纯 MIME 数组 `['image/jpeg', ...]`，但 `wp_handle_upload()` 的 `mimes` 参数需 `ext => mime` 映射（与 `get_allowed_mime_types()` 同格式）；旧 WP 版本下纯 MIME 数组使 `wp_check_filetype_and_ext()` 按扩展名正则匹配失败 → 上传被拒。改为 `['jpg|jpeg|jpe'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp','gif'=>'image/gif','pdf'=>'application/pdf']`。
+- **诊断日志**：`handle_upload()` 在 PHP 上传错误码异常或 `store()` 返回 0 时（仅 `WP_DEBUG` 开启）`error_log('[BWPC] ...')`，便于定位「图片传到哪了 / 为何未传」（uploads 目录权限、MIME、大小）。
+- 版本 `0.1.18 → 0.1.19` + `define('BWPC_VERSION','0.1.19')`。
+
+## [0.1.18] — 2026-08-31 (RELEASED)
 
 > ATTACHMENT-001 CP1 审计收口（ACCEPT WITH CORRECTIONS）：修复 #12 孤儿文件 + #15 Storage Boundary 抽象。
 

@@ -586,6 +586,25 @@ bwpc_check(
 	'comment.php 未调用 render_media 或未输出 .bwpc-comment__media 容器'
 );
 
+// v0.1.19: 待审评论兼容 + MIME 白名单格式修正（实机「图片不显示」根因收口）。
+$att_src = is_file( $root . '/includes/class-bwpc-attachment.php' ) ? file_get_contents( $root . '/includes/class-bwpc-attachment.php' ) : '';
+bwpc_check(
+	false !== strpos( $att_src, 'transition_comment_status' )
+		&& false !== strpos( $att_src, "'on_approve'" ),
+	'待审评论兼容契约（v0.1.19：注册 transition_comment_status + on_approve 转正）',
+	'class-bwpc-attachment.php 未注册 transition_comment_status / on_approve'
+);
+bwpc_check(
+	false !== strpos( $att_src, 'META_ATTACHMENT_PENDING' ),
+	'待审暂存 meta 契约（v0.1.19：_bwpc_attachment_pending 常量存在）',
+	'class-bwpc-attachment.php 缺少 META_ATTACHMENT_PENDING 常量'
+);
+bwpc_check(
+	false !== strpos( $att_src, 'jpg|jpeg|jpe' ),
+	'MIME 白名单格式契约（v0.1.19：allowed_mimes 须为 ext=>mime 映射，非纯 MIME 数组）',
+	'class-bwpc-attachment.php allowed_mimes 仍为纯 MIME 数组（旧 WP 下 wp_handle_upload 会被拒）'
+);
+
 // v0.1.13: 评论分页视觉契约（非当前页必须有清晰可见的默认边框，不是 --vosalen-border）。
 $vosalen_css = is_file( $root . '/assets/css/berlin-wp-comments-vosalen.css' )
 	? file_get_contents( $root . '/assets/css/berlin-wp-comments-vosalen.css' )

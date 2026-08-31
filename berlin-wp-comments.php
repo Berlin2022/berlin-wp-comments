@@ -3,7 +3,7 @@
  * Plugin Name:       Berlin WP Comments
  * Plugin URI:        https://github.com/Berlin2022/berlin-wp-comments
  * Description:       Minimal WordPress native comments enhancer — Shortcode + local avatars + native comments. WordPress owns the data and lifecycle; this plugin only handles presentation and avatars.
- * Version:           0.1.18
+ * Version:           0.1.19
  * Requires at least: 6.0
  * Requires PHP:      7.0
  * Author:            Berlin
@@ -60,7 +60,7 @@ if ( PHP_VERSION_ID < 70000 ) {
 /**
  * 插件常量。
  */
-define( 'BWPC_VERSION', '0.1.18' );
+define( 'BWPC_VERSION', '0.1.19' );
 define( 'BWPC_PLUGIN_FILE', __FILE__ );
 define( 'BWPC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BWPC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

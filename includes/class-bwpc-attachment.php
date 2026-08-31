@@ -38,11 +38,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Bwpc_Comment_Attachment {
 
-	/** @var string 评论 meta：附件 ID。 */
+	/** @var string 评论 meta：附件 ID（已批准评论正式关联）。 */
 	const META_ATTACHMENT_ID = '_bwpc_attachment_id';
 
 	/** @var string 评论 meta：附件 URL（冗余存，加快读取；权威以 attachment id + wp_get_attachment_url() 为准）。 */
 	const META_ATTACHMENT_URL = '_bwpc_attachment_url';
+
+	/** @var string 评论 meta：待审附件 ID（提交时即上传入库，评论批准后由 on_approve() 转正）。 */
+	const META_ATTACHMENT_PENDING = '_bwpc_attachment_pending';
 
 	/**
 	 * 存储提供方（ATTACHMENT-001 §8 Storage Adapter Boundary）。
@@ -62,10 +65,11 @@ class Bwpc_Comment_Attachment {
 	 * @return void
 	 */
 	public function register() {
-		add_action( 'comment_post',       array( $this, 'handle_upload' ), 10, 3 );
-		add_action( 'deleted_comment',    array( $this, 'cleanup' ),       10, 2 );
-		add_action( 'trash_comment',      array( $this, 'cleanup' ),       10, 2 );
-		add_action( 'spam_comment',       array( $this, 'cleanup' ),       10, 2 );
+		add_action( 'comment_post',            array( $this, 'handle_upload' ), 10, 3 );
+		add_action( 'transition_comment_status', array( $this, 'on_approve' ), 10, 3 );
+		add_action( 'deleted_comment',         array( $this, 'cleanup' ),       10, 2 );
+		add_action( 'trash_comment',           array( $this, 'cleanup' ),       10, 2 );
+		add_action( 'spam_comment',            array( $this, 'cleanup' ),       10, 2 );
 	}
 
 	/**
@@ -101,17 +105,20 @@ class Bwpc_Comment_Attachment {
 	 * @return string[]
 	 */
 	protected function allowed_mimes() {
+		// 注意：wp_handle_upload() 的 `mimes` 参数期望 'ext' => 'mime' 映射
+		// （与 get_allowed_mime_types() 同格式），不能传纯 MIME 数组，
+		// 否则旧 WP 版本下 wp_check_filetype_and_ext() 按扩展名正则匹配失败 → 上传被拒。
 		$default = array(
-			'image/jpeg',
-			'image/png',
-			'image/webp',
-			'image/gif',
-			'application/pdf',
+			'jpg|jpeg|jpe' => 'image/jpeg',
+			'png'          => 'image/png',
+			'webp'         => 'image/webp',
+			'gif'          => 'image/gif',
+			'pdf'          => 'application/pdf',
 		);
 		/**
 		 * Filter the allowed attachment MIME types for comment uploads.
 		 *
-		 * @param string[] $mimes Default allow-list.
+		 * @param array $mimes Default allow-list ('ext' => 'mime').
 		 */
 		return (array) apply_filters( 'bwpc_attachment_allowed_mimes', $default );
 	}
@@ -144,12 +151,6 @@ class Bwpc_Comment_Attachment {
 			return;
 		}
 
-		// 仅 approved 评论挂附件（spam/trash/pending 一律不挂）。
-		$is_approved = ( 1 === (int) $approved || '1' === $approved || 'approve' === $approved );
-		if ( ! $is_approved ) {
-			return;
-		}
-
 		// PHPCS: $_FILES 是超全局；此处的比较来自 WP 文档（$_FILES['x']['error']）。
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput
 		$f = $_FILES['bwpc_comment_attachment'];
@@ -159,29 +160,70 @@ class Bwpc_Comment_Attachment {
 
 		// 上传错误码检查。
 		if ( ! empty( $f['error'] ) && UPLOAD_ERR_OK !== (int) $f['error'] ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( '[BWPC] attachment upload PHP error code %d (comment %d)', (int) $f['error'], (int) $comment_id ) );
+			}
 			return;
 		}
-
-		// 大小校验（$f['size'] 在前端已被浏览器可知，但服务端仍需自验防绕过）。
-		// 注：最终大小上限由 Storage Provider 内部再次硬校验（防前端绕过 + 适配 R2 等后端）。
 		// phpcs:enable WordPress.Security.ValidatedSanitizedInput
 
 		// 持久化委托给 Storage Provider（ATTACHMENT-001 §8）：
 		// 适配层不直接调用 wp_handle_upload / wp_insert_attachment，仅依赖接口。
+		// 注意：无论评论是否已批准都先入库——后台批准时 $_FILES 早已不可用，
+		// 必须在提交这一刻完成 store（待审评论的附件用 _bwpc_attachment_pending 暂存，
+		// 由 on_approve() 在评论批准时转正）。
 		$attach_id = $this->storage()->store( $f );
 		if ( ! $attach_id ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( '[BWPC] attachment store() failed for comment %d (file=%s) — check uploads dir perms / MIME / size', (int) $comment_id, $f['name'] ) );
+			}
 			// 上传 / 插入失败均静默返回——评论本身已成功提交（#16 不破坏评论核心）；
 			// 插入失败产生的孤儿物理文件由 Provider::store() 内部 @unlink 兜底（#12 修正）。
 			return;
 		}
 
-		// 关联到评论 meta。
-		update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_ID, (int) $attach_id );
-		update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $this->storage()->get_url( $attach_id ) ) );
+		$is_approved = ( 1 === (int) $approved || '1' === $approved || 'approve' === $approved );
+		if ( $is_approved ) {
+			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_ID, (int) $attach_id );
+			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $this->storage()->get_url( $attach_id ) ) );
+		} else {
+			// 待审评论：文件已落媒体库，暂存 pending；批准后由 on_approve() 转正为正式关联。
+			update_comment_meta( (int) $comment_id, self::META_ATTACHMENT_PENDING, (int) $attach_id );
+		}
+	}
+
+	/**
+	 * 评论状态变更钩子：待审评论被批准时，把暂存附件转正为正式关联。
+	 *
+	 * 提交时刻 $_FILES 已不可用，故 handle_upload() 对 pending 评论先把文件入库到
+	 * 媒体库并写入 _bwpc_attachment_pending；此处（后台批准）再把 pending 移到正式
+	 * _bwpc_attachment_id，render_media() 即可读取显示。
+	 *
+	 * @param string     $new_status 新状态（approved / unapproved / spam / trash）。
+	 * @param string     $old_status 旧状态。
+	 * @param WP_Comment $comment    评论对象。
+	 * @return void
+	 */
+	public function on_approve( $new_status, $old_status, $comment ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+		if ( 'approved' !== $new_status || 'approved' === $old_status ) {
+			return;
+		}
+		if ( ! $comment instanceof WP_Comment ) {
+			return;
+		}
+		$comment_id = (int) $comment->comment_ID;
+		$pid        = (int) get_comment_meta( $comment_id, self::META_ATTACHMENT_PENDING, true );
+		if ( $pid > 0 ) {
+			update_comment_meta( $comment_id, self::META_ATTACHMENT_ID, $pid );
+			update_comment_meta( $comment_id, self::META_ATTACHMENT_URL, esc_url_raw( $this->storage()->get_url( $pid ) ) );
+			delete_comment_meta( $comment_id, self::META_ATTACHMENT_PENDING );
+		}
 	}
 
 	/**
 	 * 清理钩子：评论被删/回收/标垃圾时同步删附件注册（物理删）+ 清 meta。
+	 *
+	 * 同时清理正式关联与待审暂存两路 meta（待审评论被删时其 pending 附件也需清）。
 	 *
 	 * @param int $comment_id 评论 ID。
 	 * @return void
@@ -193,13 +235,18 @@ class Bwpc_Comment_Attachment {
 		}
 
 		$aid = (int) get_comment_meta( $comment_id, self::META_ATTACHMENT_ID, true );
+		$pid = (int) get_comment_meta( $comment_id, self::META_ATTACHMENT_PENDING, true );
 		if ( $aid > 0 ) {
 			// 经 Storage Provider 删除（含物理文件），不直接调用 wp_delete_attachment（#15 解耦）。
 			$this->storage()->delete( $aid );
 		}
+		if ( $pid > 0 && $pid !== $aid ) {
+			$this->storage()->delete( $pid );
+		}
 
 		delete_comment_meta( $comment_id, self::META_ATTACHMENT_ID );
 		delete_comment_meta( $comment_id, self::META_ATTACHMENT_URL );
+		delete_comment_meta( $comment_id, self::META_ATTACHMENT_PENDING );
 	}
 
 	/**
